@@ -1,0 +1,28 @@
+[project]
+name = "dnit-pdf-extractor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.137.1",
+    "uvicorn[standard]>=0.34.0",
+    "pdfplumber>=0.11.10",
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.5",
+    "python-multipart>=0.0.20",
+    "jinja2>=3.1.6",
+    "aiofiles>=25.1.0",
+    "python-dotenv>=1.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.4.0",
+    "pytest>=9.1.0",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

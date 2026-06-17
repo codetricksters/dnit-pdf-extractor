@@ -1,0 +1,90 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  background: #f4f6f8;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 2.5rem 3rem;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.10);
+  width: 480px;
+  max-width: 95vw;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin-bottom: 0.4rem;
+  color: #1a1a2e;
+}
+
+p.sub {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 1.6rem;
+}
+
+#drop-zone {
+  border: 2px dashed #aaa;
+  border-radius: 8px;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #888;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+#drop-zone.over {
+  border-color: #0066cc;
+  background: #e8f1fb;
+}
+
+#drop-zone input[type="file"] {
+  display: none;
+}
+
+#file-list {
+  margin: 1rem 0;
+  font-size: 0.85rem;
+  color: #444;
+  min-height: 1.2em;
+}
+
+button[type="submit"] {
+  width: 100%;
+  padding: 0.75rem;
+  background: #0066cc;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button[type="submit"]:hover {
+  background: #0052a3;
+}
+
+button[type="submit"]:disabled {
+  background: #9ab8db;
+  cursor: not-allowed;
+}
+
+#status {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  text-align: center;
+  min-height: 1.2em;
+  color: #c0392b;
+}

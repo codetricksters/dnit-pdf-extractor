@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}DNIT PDF Extractor{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h1>DNIT PDF Extractor</h1>
+  <p class="sub">Faça upload de um ou mais PDFs de Medição para gerar a planilha Excel.</p>
+  <form id="upload-form">
+    <div id="drop-zone">
+      <input type="file" id="file-input" name="files" accept=".pdf" multiple />
+      <span id="drop-label">Arraste arquivos PDF aqui ou <u>clique para selecionar</u></span>
+    </div>
+    <div id="file-list"></div>
+    <button type="submit" id="submit-btn" disabled>Extrair e Baixar Excel</button>
+  </form>
+  <div id="status"></div>
+</div>
+{% endblock %}
