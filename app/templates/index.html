@@ -5,15 +5,24 @@
 {% block content %}
 <div class="card">
   <h1>DNIT PDF</h1>
-  <p class="sub">Faça upload de um ou mais PDFs de Medição para gerar a planilha Excel.</p>
+  <p class="sub">Faça upload de um ou mais PDFs de Medição para gerar arquivos JSON.</p>
   <form id="upload-form">
     <div id="drop-zone">
       <input type="file" id="file-input" name="files" accept=".pdf" multiple />
       <span id="drop-label">Arraste arquivos PDF aqui ou <u>clique para selecionar</u></span>
     </div>
     <div id="file-list"></div>
-    <button type="submit" id="submit-btn" disabled>Extrair e Baixar Excel</button>
+    <button type="submit" id="submit-btn" disabled>Enviar para Processamento</button>
   </form>
   <div id="status"></div>
+
+  <div id="progress-section" class="hidden">
+    <h2>Processamento</h2>
+    <ul id="file-progress"></ul>
+    <div id="download-section" class="hidden">
+      <a id="download-all-btn" class="btn-download">Baixar Todos (.zip)</a>
+    </div>
+    <button id="reset-btn" class="btn-reset hidden">Novo Processamento</button>
+  </div>
 </div>
 {% endblock %}

@@ -1,16 +1,22 @@
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx2 import ASGITransport, AsyncClient
 
 from app.main import app
 from app.services.extractor import EXPECTED_COLUMNS
 
 
-@pytest.fixture(scope="session")
-def client():
-    with TestClient(app) as c:
+@pytest.fixture()
+async def client():
+    app.state.executor = ThreadPoolExecutor(max_workers=2)
+    app.state.ocr_executor = ThreadPoolExecutor(max_workers=1)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+    app.state.executor.shutdown(wait=False)
+    app.state.ocr_executor.shutdown(wait=False)
 
 
 def make_rows(source: str) -> list[dict]:
@@ -34,13 +40,14 @@ def make_rows(source: str) -> list[dict]:
     return [_row("56988", "Pavimentação asfáltica"), _row("54393", "Terraplenagem geral")]
 
 
-def make_pdfplumber_mock(tables_per_page: list[list[list]]) -> MagicMock:
+def make_pdfplumber_mock(tables_per_page: list[list[list]], page_text: str = "") -> MagicMock:
     """Return a mock that mimics pdfplumber's context-manager + pages API."""
     mock_pdf = MagicMock()
     pages = []
     for tables in tables_per_page:
         page = MagicMock()
         page.extract_tables.return_value = tables
+        page.extract_text.return_value = page_text
         pages.append(page)
     mock_pdf.pages = pages
     mock_pdf.__enter__ = lambda self: self

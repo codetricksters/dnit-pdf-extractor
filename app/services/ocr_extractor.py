@@ -5,10 +5,10 @@ import easyocr
 import numpy as np
 import pdfplumber
 import torch
-from fastapi import HTTPException
+from .exceptions import ExtractionError
 from PIL import Image
 
-from .extractor import EXPECTED_COLUMNS
+from .extractor import EXPECTED_COLUMNS, _PERIODO_LIQUIDO_RE
 
 _SERVICE_CODE_RE = re.compile(r"^\d{4,}")
 
@@ -294,18 +294,19 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str) -> list[dict]:
     try:
         pdf = pdfplumber.open(io.BytesIO(file_bytes))
     except Exception as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Could not open '{source_name}': {exc}",
-        )
+        raise ExtractionError(f"Could not open '{source_name}': {exc}")
+
+    periodo_liquido: str = ""
 
     with pdf:
         pages = pdf.pages
         if not pages:
-            raise HTTPException(
-                status_code=422,
-                detail=f"No pages found in '{source_name}'.",
-            )
+            raise ExtractionError(f"No pages found in '{source_name}'.")
+
+        page_text = pages[0].extract_text() or ""
+        m = _PERIODO_LIQUIDO_RE.search(page_text)
+        if m:
+            periodo_liquido = f"{m.group(1)} - {m.group(2)}"
 
         first_image = _pdf_page_to_image(pages[0])
         rotation = _detect_orientation(first_image)
@@ -320,16 +321,22 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str) -> list[dict]:
                 all_page_rows.extend(rows)
 
     if not all_page_rows:
-        raise HTTPException(
-            status_code=422,
-            detail=f"OCR could not extract any text from '{source_name}'.",
+        raise ExtractionError(
+            f"OCR could not extract any text from '{source_name}'."
         )
+
+    if not periodo_liquido:
+        ocr_text = " ".join(
+            item["text"] for row in all_page_rows for item in row
+        )
+        m = _PERIODO_LIQUIDO_RE.search(ocr_text)
+        if m:
+            periodo_liquido = f"{m.group(1)} - {m.group(2)}"
 
     header_result = _find_header_row(all_page_rows)
     if header_result is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"No table header found in '{source_name}' (OCR).",
+        raise ExtractionError(
+            f"No table header found in '{source_name}' (OCR)."
         )
 
     header_end_idx, col_boundaries = header_result
@@ -379,12 +386,12 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str) -> list[dict]:
         records.append(current_record)
 
     if not records:
-        raise HTTPException(
-            status_code=422,
-            detail=f"No recognisable main-table data found in '{source_name}' (OCR).",
+        raise ExtractionError(
+            f"No recognisable main-table data found in '{source_name}' (OCR)."
         )
 
     for row in records:
+        row["Período Líquido"] = periodo_liquido
         row["Source_File"] = source_name
 
     return records

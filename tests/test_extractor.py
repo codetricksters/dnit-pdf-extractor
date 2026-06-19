@@ -2,7 +2,7 @@
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
+from app.services.exceptions import ExtractionError
 
 from app.services.extractor import (
     EXPECTED_COLUMNS,
@@ -149,17 +149,15 @@ def test_map_row_defaults_missing_columns_to_empty():
 
 # --- extract_from_pdf (error cases use real corrupt/empty PDFs) ---
 
-def test_extract_raises_422_on_corrupt_pdf():
-    with pytest.raises(HTTPException) as exc_info:
+def test_extract_raises_on_corrupt_pdf():
+    with pytest.raises(ExtractionError) as exc_info:
         extract_from_pdf(corrupt_pdf(), "corrupt.pdf")
-    assert exc_info.value.status_code == 422
-    assert "corrupt.pdf" in exc_info.value.detail
+    assert "corrupt.pdf" in str(exc_info.value)
 
 
-def test_extract_raises_422_when_no_table_found():
-    with pytest.raises(HTTPException) as exc_info:
+def test_extract_raises_when_no_table_found():
+    with pytest.raises(ExtractionError):
         extract_from_pdf(no_table_pdf(), "empty.pdf")
-    assert exc_info.value.status_code == 422
 
 
 # --- extract_from_pdf (happy path — mock pdfplumber) ---

@@ -2,7 +2,8 @@ import io
 import re
 
 import pdfplumber
-from fastapi import HTTPException
+
+from .exceptions import ExtractionError
 
 MAIN_HEADER_KEYWORDS = {"serviço", "descrição", "código"}
 INDICES_KEYWORDS = {"adloc", "conser", "emuimp", "índices", "indices"}
@@ -27,6 +28,10 @@ EXPECTED_COLUMNS = [
 ]
 
 _SERVICE_CODE_RE = re.compile(r"^\d{4,}")
+_PERIODO_LIQUIDO_RE = re.compile(
+    r"Per[ií]odo\s+L[ií]quido:\s*(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})",
+    re.IGNORECASE,
+)
 
 # Matches section header rows: "1,0 - GRUPO 1 -", "17,1 - GRUPO 6 -", etc.
 _SECTION_HEADER_RE = re.compile(r"^\d+[,.]\d+\s*-")
@@ -137,17 +142,20 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> list[dict]:
     try:
         pdf = pdfplumber.open(io.BytesIO(file_bytes))
     except Exception as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Could not open '{source_name}': {exc}",
-        )
+        raise ExtractionError(f"Could not open '{source_name}': {exc}")
 
     header: list | None = None
     records: list[dict] = []
     current_record: dict | None = None
+    periodo_liquido: str = ""
 
     with pdf:
         for page in pdf.pages:
+            if not periodo_liquido:
+                page_text = page.extract_text() or ""
+                m = _PERIODO_LIQUIDO_RE.search(page_text)
+                if m:
+                    periodo_liquido = f"{m.group(1)} - {m.group(2)}"
             tables = page.extract_tables()
             for table in tables:
                 if not table:
@@ -205,12 +213,12 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> list[dict]:
         records.append(current_record)
 
     if not records:
-        raise HTTPException(
-            status_code=422,
-            detail=f"No recognisable main-table data found in '{source_name}'.",
+        raise ExtractionError(
+            f"No recognisable main-table data found in '{source_name}'."
         )
 
     for row in records:
+        row["Período Líquido"] = periodo_liquido
         row["Source_File"] = source_name
 
     return records

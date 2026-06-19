@@ -86,5 +86,131 @@ button[type="submit"]:disabled {
   font-size: 0.9rem;
   text-align: center;
   min-height: 1.2em;
+  color: #555;
+}
+
+#status.error { color: #c0392b; }
+#status.success { color: #27ae60; }
+
+.hidden { display: none !important; }
+
+#progress-section {
+  margin-top: 1.5rem;
+  border-top: 1px solid #eee;
+  padding-top: 1.2rem;
+}
+
+#progress-section h2 {
+  font-size: 1rem;
+  margin-bottom: 0.8rem;
+  color: #1a1a2e;
+}
+
+#file-progress {
+  list-style: none;
+  padding: 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.85rem;
+}
+
+.file-item:last-child { border-bottom: none; }
+
+.file-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-pending .file-indicator { background: #ccc; }
+.status-processing .file-indicator {
+  background: #f39c12;
+  animation: pulse 1s infinite;
+}
+.status-completed .file-indicator { background: #27ae60; }
+.status-failed .file-indicator { background: #c0392b; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+}
+
+.file-action {
+  flex-shrink: 0;
+}
+
+.btn-download-sm {
+  font-size: 0.8rem;
+  color: #0066cc;
+  text-decoration: none;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #0066cc;
+  border-radius: 4px;
+}
+
+.btn-download-sm:hover {
+  background: #0066cc;
+  color: #fff;
+}
+
+.error-msg {
+  font-size: 0.75rem;
   color: #c0392b;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#download-section {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.btn-download {
+  display: inline-block;
+  padding: 0.6rem 1.2rem;
+  background: #27ae60;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.btn-download:hover {
+  background: #1e8e4e;
+}
+
+.btn-reset {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.6rem 1.2rem;
+  background: #7f8c8d;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-reset:hover {
+  background: #636e72;
 }

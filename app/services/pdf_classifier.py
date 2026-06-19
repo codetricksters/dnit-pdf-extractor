@@ -1,7 +1,8 @@
 import io
 
 import pdfplumber
-from fastapi import HTTPException
+
+from .exceptions import ExtractionError
 
 
 def is_image_pdf(file_bytes: bytes, source_name: str) -> bool:
@@ -14,10 +15,7 @@ def is_image_pdf(file_bytes: bytes, source_name: str) -> bool:
     try:
         pdf = pdfplumber.open(io.BytesIO(file_bytes))
     except Exception as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Could not open '{source_name}': {exc}",
-        )
+        raise ExtractionError(f"Could not open '{source_name}': {exc}")
 
     image_pages = 0
     total_pages = 0
