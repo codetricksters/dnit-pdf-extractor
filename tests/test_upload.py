@@ -22,7 +22,8 @@ def _post_mocked(client, filenames: list[str]):
     def fake_extract(file_bytes, source_name):
         return make_rows(source_name)
 
-    with patch("app.routers.upload.extract_from_pdf", side_effect=fake_extract):
+    with patch("app.routers.upload.extract_from_pdf", side_effect=fake_extract), \
+         patch("app.routers.upload.is_image_pdf", return_value=False):
         files = [
             ("files", (name, b"fakepdfbytes", "application/pdf"))
             for name in filenames

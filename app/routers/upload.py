@@ -9,6 +9,8 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from ..services.extractor import EXPECTED_COLUMNS, extract_from_pdf
+from ..services.ocr_extractor import extract_from_pdf_ocr
+from ..services.pdf_classifier import is_image_pdf
 
 router = APIRouter()
 
@@ -28,7 +30,11 @@ async def upload(files: List[UploadFile] = File(...)):
     all_rows: list[dict] = []
     for file in files:
         content = await file.read()
-        rows = extract_from_pdf(content, file.filename or "unknown.pdf")
+        filename = file.filename or "unknown.pdf"
+        if is_image_pdf(content, filename):
+            rows = extract_from_pdf_ocr(content, filename)
+        else:
+            rows = extract_from_pdf(content, filename)
         all_rows.extend(rows)
 
     df = pd.DataFrame(all_rows, columns=EXPECTED_COLUMNS + ["Source_File"])
