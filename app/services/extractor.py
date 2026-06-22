@@ -4,6 +4,8 @@ import re
 import pdfplumber
 
 from .exceptions import ExtractionError
+from .number_parser import convert_numeric_columns
+from .number_parser import parse_br_number  # noqa: F401 — re-exported for external callers
 
 MAIN_HEADER_KEYWORDS = {"serviço", "descrição", "código"}
 INDICES_KEYWORDS = {"adloc", "conser", "emuimp", "índices", "indices"}
@@ -37,8 +39,6 @@ _PERIODO_LIQUIDO_RE = re.compile(
 _SECTION_HEADER_RE = re.compile(r"^\d+[,.]\d+\s*-")
 
 
-def parse_br_number(value: str) -> float:
-    return float(value.replace(".", "").replace(",", "."))
 
 
 def _is_indices_row(row: list) -> bool:
@@ -220,5 +220,6 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> list[dict]:
     for row in records:
         row["Período Líquido"] = periodo_liquido
         row["Source_File"] = source_name
+        convert_numeric_columns(row)
 
     return records

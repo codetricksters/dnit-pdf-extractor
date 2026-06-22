@@ -1,15 +1,32 @@
+import tempfile
+import os
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import pytest
 from httpx2 import ASGITransport, AsyncClient
 
-from app.main import app
 from app.services.extractor import EXPECTED_COLUMNS
+
+
+@pytest.fixture(autouse=True)
+async def setup_storage(tmp_path):
+    os.environ["STORAGE_PATH"] = str(tmp_path / "data")
+    import app.config as config
+    config.STORAGE_PATH = tmp_path / "data"
+    config.DB_PATH = config.STORAGE_PATH / "extractor.db"
+    config.STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+    (config.STORAGE_PATH / "jobs").mkdir(exist_ok=True)
+
+    from app.services.job_manager import init_db, close_db
+    await init_db()
+    yield
+    await close_db()
 
 
 @pytest.fixture()
 async def client():
+    from app.main import app
     app.state.executor = ThreadPoolExecutor(max_workers=2)
     app.state.ocr_executor = ThreadPoolExecutor(max_workers=1)
     transport = ASGITransport(app=app)
@@ -27,13 +44,13 @@ def make_rows(source: str) -> list[dict]:
         row["Descrição"] = desc
         row["Código SICRO"] = "1234567"
         row["Unidade"] = "m²"
-        row["Preço Unitário"] = "1.234,56"
-        row["Quantidade Acumulada"] = "100,00"
-        row["Valor a PI Acumulado"] = "123.456,00"
-        row["Valor a PI Líquido"] = "100.000,00"
-        row["Fator"] = "1,0000"
-        row["Reajustamento Líquido"] = "0,00"
-        row["Ajuste Contratual Líquido"] = "0,00"
+        row["Preço Unitário"] = 1234.56
+        row["Quantidade Acumulada"] = 100.0
+        row["Valor a PI Acumulado"] = 123456.0
+        row["Valor a PI Líquido"] = 100000.0
+        row["Fator"] = 1.0
+        row["Reajustamento Líquido"] = 0.0
+        row["Ajuste Contratual Líquido"] = 0.0
         row["Source_File"] = source
         return row
 

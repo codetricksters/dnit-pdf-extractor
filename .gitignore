@@ -1,3 +1,6 @@
+# Application data (persistent storage)
+data/
+
 # Python-generated files
 __pycache__/
 *.py[oc]

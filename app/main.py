@@ -9,13 +9,14 @@ from fastapi.staticfiles import StaticFiles
 
 from .routers import upload
 from .routers import jobs
-from .services.job_manager import cleanup_stale_jobs
+from .services.job_manager import cleanup_stale_jobs, init_db, close_db
 
 BASE_DIR = Path(__file__).parent
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_db()
     app.state.executor = ThreadPoolExecutor(
         max_workers=min(4, os.cpu_count() or 2)
     )
@@ -25,12 +26,13 @@ async def lifespan(app: FastAPI):
     task.cancel()
     app.state.executor.shutdown(wait=False)
     app.state.ocr_executor.shutdown(wait=False)
+    await close_db()
 
 
 async def _cleanup_loop():
     while True:
         await asyncio.sleep(300)
-        cleanup_stale_jobs()
+        await cleanup_stale_jobs()
 
 
 app = FastAPI(

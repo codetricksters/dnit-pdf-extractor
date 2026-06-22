@@ -171,10 +171,27 @@ button[type="submit"]:disabled {
 .error-msg {
   font-size: 0.75rem;
   color: #c0392b;
-  max-width: 180px;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.btn-retry-sm {
+  font-size: 0.75rem;
+  color: #f39c12;
+  background: none;
+  border: 1px solid #f39c12;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+  margin-left: 0.4rem;
+  transition: background 0.2s, color 0.2s;
+}
+
+.btn-retry-sm:hover {
+  background: #f39c12;
+  color: #fff;
 }
 
 #download-section {

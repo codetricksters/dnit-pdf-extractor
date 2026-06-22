@@ -11,6 +11,7 @@ const downloadAllBtn = document.getElementById('download-all-btn');
 let selectedFiles = [];
 let currentJobId = null;
 let jobFinished = false;
+let eventSource = null;
 
 document.getElementById('reset-btn').addEventListener('click', () => {
   resetState();
@@ -52,6 +53,11 @@ function resetState() {
   status.textContent = '';
   status.className = '';
   input.value = '';
+  localStorage.removeItem('dnit_job_id');
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
 }
 
 function renderList() {
@@ -84,6 +90,7 @@ document.getElementById('upload-form').addEventListener('submit', async e => {
     }
     const data = await res.json();
     currentJobId = data.job_id;
+    localStorage.setItem('dnit_job_id', currentJobId);
 
     status.textContent = 'Processando…';
     progressSection.classList.remove('hidden');
@@ -108,24 +115,30 @@ function initFileProgress(filenames) {
 }
 
 function connectSSE(jobId) {
-  const es = new EventSource(`/jobs/${jobId}/events`);
+  if (eventSource) {
+    eventSource.close();
+  }
+  eventSource = new EventSource(`/jobs/${jobId}/events`);
 
-  es.onmessage = (event) => {
+  eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
     updateProgress(data);
     if (data.completed) {
-      es.close();
+      eventSource.close();
+      eventSource = null;
       onJobComplete(jobId);
     }
   };
 
-  es.addEventListener('complete', () => {
-    es.close();
+  eventSource.addEventListener('complete', () => {
+    eventSource.close();
+    eventSource = null;
     onJobComplete(jobId);
   });
 
-  es.onerror = async () => {
-    es.close();
+  eventSource.onerror = async () => {
+    eventSource.close();
+    eventSource = null;
     const res = await fetch(`/jobs/${jobId}/status`).catch(() => null);
     if (res && res.ok) {
       const data = await res.json();
@@ -141,8 +154,14 @@ function connectSSE(jobId) {
 
 function updateProgress(data) {
   for (const [filename, info] of Object.entries(data.files)) {
-    const li = fileProgress.querySelector(`[data-filename="${CSS.escape(filename)}"]`);
-    if (!li) continue;
+    let li = fileProgress.querySelector(`[data-filename="${CSS.escape(filename)}"]`);
+    if (!li) {
+      li = document.createElement('li');
+      li.className = 'file-item status-pending';
+      li.dataset.filename = filename;
+      li.innerHTML = `<span class="file-indicator"></span><span class="file-name">${escapeHtml(filename)}</span><span class="file-action"></span>`;
+      fileProgress.appendChild(li);
+    }
 
     li.className = `file-item status-${info.status}`;
     const action = li.querySelector('.file-action');
@@ -150,10 +169,30 @@ function updateProgress(data) {
     if (info.status === 'completed') {
       action.innerHTML = `<a href="/jobs/${currentJobId}/download/${encodeURIComponent(filename)}" class="btn-download-sm">Baixar</a>`;
     } else if (info.status === 'failed') {
-      action.innerHTML = `<span class="error-msg">${escapeHtml(info.error || 'Erro')}</span>`;
+      action.innerHTML = `<span class="error-msg">${escapeHtml(info.error || 'Erro')}</span><button class="btn-retry-sm" onclick="retryFile('${escapeHtml(filename)}')">Tentar Novamente</button>`;
     } else {
       action.innerHTML = '';
     }
+  }
+}
+
+async function retryFile(filename) {
+  const res = await fetch(`/jobs/${currentJobId}/retry/${encodeURIComponent(filename)}`, { method: 'POST' });
+  if (res.ok) {
+    const li = fileProgress.querySelector(`[data-filename="${CSS.escape(filename)}"]`);
+    if (li) {
+      li.className = 'file-item status-pending';
+      li.querySelector('.file-action').innerHTML = '';
+    }
+    status.textContent = 'Processando…';
+    status.className = '';
+    downloadSection.classList.add('hidden');
+    jobFinished = false;
+    connectSSE(currentJobId);
+  } else {
+    const err = await res.json().catch(() => ({ detail: 'Erro ao tentar novamente' }));
+    status.textContent = 'Erro: ' + (err.detail || 'Falha ao reprocessar');
+    status.className = 'error';
   }
 }
 
@@ -189,3 +228,32 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+async function reconnectToJob(jobId) {
+  const res = await fetch(`/jobs/${jobId}/status`);
+  if (!res.ok) {
+    localStorage.removeItem('dnit_job_id');
+    return;
+  }
+  const data = await res.json();
+  currentJobId = jobId;
+
+  progressSection.classList.remove('hidden');
+  initFileProgress(Object.keys(data.files));
+  updateProgress(data);
+  document.getElementById('reset-btn').classList.remove('hidden');
+
+  if (data.completed) {
+    onJobComplete(jobId);
+  } else {
+    status.textContent = 'Processando…';
+    connectSSE(jobId);
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const savedJobId = localStorage.getItem('dnit_job_id');
+  if (savedJobId) {
+    reconnectToJob(savedJobId);
+  }
+});

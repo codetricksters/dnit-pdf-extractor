@@ -9,6 +9,7 @@ from .exceptions import ExtractionError
 from PIL import Image
 
 from .extractor import EXPECTED_COLUMNS, _PERIODO_LIQUIDO_RE
+from .number_parser import convert_numeric_columns
 
 _SERVICE_CODE_RE = re.compile(r"^\d{4,}")
 
@@ -289,8 +290,48 @@ def _is_continuation_row(row: list[dict], cells: list[str]) -> bool:
     return bool(cells[1].strip()) if len(cells) > 1 else False
 
 
-def extract_from_pdf_ocr(file_bytes: bytes, source_name: str) -> list[dict]:
-    """Extract tabular data from an image-based PDF using OCR."""
+def _extract_pages_via_disk(pdf, source_name: str, job_id: str) -> list[list[dict]]:
+    """Split PDF pages to disk as PNGs, then OCR each one at a time."""
+    from .storage import save_page_image, pages_dir
+
+    with pdf:
+        pages = pdf.pages
+        if not pages:
+            raise ExtractionError(f"No pages found in '{source_name}'.")
+
+        first_image = _pdf_page_to_image(pages[0])
+        rotation = _detect_orientation(first_image)
+        del first_image
+
+        page_image_paths = []
+        for i, page in enumerate(pages):
+            pil_image = _pdf_page_to_image(page)
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            path = save_page_image(job_id, i, buf.getvalue())
+            page_image_paths.append(path)
+            del pil_image, buf
+
+    all_page_rows: list[list[dict]] = []
+    for path in page_image_paths:
+        pil_image = Image.open(path)
+        image = _prepare_page_image(pil_image, rotation)
+        results = _ocr_image(image)
+        if results:
+            rows = _cluster_rows(results)
+            all_page_rows.extend(rows)
+        del image, pil_image
+        path.unlink(missing_ok=True)
+
+    return all_page_rows
+
+
+def extract_from_pdf_ocr(file_bytes: bytes, source_name: str, *, job_id: str | None = None) -> list[dict]:
+    """Extract tabular data from an image-based PDF using OCR.
+
+    When job_id is provided, pages are split to disk and processed one at a
+    time to avoid holding all page images in memory simultaneously.
+    """
     try:
         pdf = pdfplumber.open(io.BytesIO(file_bytes))
     except Exception as exc:
@@ -298,27 +339,40 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str) -> list[dict]:
 
     periodo_liquido: str = ""
 
-    with pdf:
-        pages = pdf.pages
-        if not pages:
-            raise ExtractionError(f"No pages found in '{source_name}'.")
+    if job_id:
+        with pdf:
+            pages = pdf.pages
+            if not pages:
+                raise ExtractionError(f"No pages found in '{source_name}'.")
+            page_text = pages[0].extract_text() or ""
+            m = _PERIODO_LIQUIDO_RE.search(page_text)
+            if m:
+                periodo_liquido = f"{m.group(1)} - {m.group(2)}"
 
-        page_text = pages[0].extract_text() or ""
-        m = _PERIODO_LIQUIDO_RE.search(page_text)
-        if m:
-            periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+        pdf2 = pdfplumber.open(io.BytesIO(file_bytes))
+        all_page_rows = _extract_pages_via_disk(pdf2, source_name, job_id)
+    else:
+        with pdf:
+            pages = pdf.pages
+            if not pages:
+                raise ExtractionError(f"No pages found in '{source_name}'.")
 
-        first_image = _pdf_page_to_image(pages[0])
-        rotation = _detect_orientation(first_image)
+            page_text = pages[0].extract_text() or ""
+            m = _PERIODO_LIQUIDO_RE.search(page_text)
+            if m:
+                periodo_liquido = f"{m.group(1)} - {m.group(2)}"
 
-        all_page_rows: list[list[dict]] = []
-        for page in pages:
-            pil_image = _pdf_page_to_image(page)
-            image = _prepare_page_image(pil_image, rotation)
-            results = _ocr_image(image)
-            if results:
-                rows = _cluster_rows(results)
-                all_page_rows.extend(rows)
+            first_image = _pdf_page_to_image(pages[0])
+            rotation = _detect_orientation(first_image)
+
+            all_page_rows: list[list[dict]] = []
+            for page in pages:
+                pil_image = _pdf_page_to_image(page)
+                image = _prepare_page_image(pil_image, rotation)
+                results = _ocr_image(image)
+                if results:
+                    rows = _cluster_rows(results)
+                    all_page_rows.extend(rows)
 
     if not all_page_rows:
         raise ExtractionError(
@@ -393,5 +447,6 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str) -> list[dict]:
     for row in records:
         row["Período Líquido"] = periodo_liquido
         row["Source_File"] = source_name
+        convert_numeric_columns(row)
 
     return records
