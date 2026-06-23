@@ -1,12 +1,14 @@
 const zone = document.getElementById('drop-zone');
 const input = document.getElementById('file-input');
-const fileList = document.getElementById('file-list');
 const submitBtn = document.getElementById('submit-btn');
 const status = document.getElementById('status');
 const progressSection = document.getElementById('progress-section');
 const fileProgress = document.getElementById('file-progress');
 const downloadSection = document.getElementById('download-section');
 const downloadAllBtn = document.getElementById('download-all-btn');
+const fileCountEl = document.getElementById('file-count');
+const fileSizeEl = document.getElementById('file-size');
+const selectFilesBtn = document.getElementById('select-files-btn');
 
 let selectedFiles = [];
 let currentJobId = null;
@@ -18,7 +20,15 @@ document.getElementById('reset-btn').addEventListener('click', () => {
   submitBtn.disabled = true;
 });
 
-zone.addEventListener('click', () => input.click());
+selectFilesBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  input.click();
+});
+
+zone.addEventListener('click', (e) => {
+  if (e.target === selectFilesBtn || selectFilesBtn.contains(e.target)) return;
+  input.click();
+});
 
 zone.addEventListener('dragover', e => {
   e.preventDefault();
@@ -38,21 +48,21 @@ input.addEventListener('change', () => addFiles([...input.files]));
 function addFiles(files) {
   if (jobFinished) resetState();
   selectedFiles = [...selectedFiles, ...files];
-  renderList();
+  renderStats();
 }
 
 function resetState() {
   selectedFiles = [];
   currentJobId = null;
   jobFinished = false;
-  fileList.textContent = '';
   fileProgress.innerHTML = '';
   progressSection.classList.add('hidden');
   downloadSection.classList.add('hidden');
   document.getElementById('reset-btn').classList.add('hidden');
   status.textContent = '';
-  status.className = '';
+  status.className = 'status-message';
   input.value = '';
+  renderStats();
   localStorage.removeItem('dnit_job_id');
   if (eventSource) {
     eventSource.close();
@@ -60,12 +70,21 @@ function resetState() {
   }
 }
 
-function renderList() {
-  fileList.textContent = selectedFiles.length
-    ? selectedFiles.map(f => f.name).join(', ')
-    : '';
-  submitBtn.disabled = selectedFiles.length === 0;
+function formatSize(bytes) {
+  if (bytes === 0) return '0 KB';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function renderStats() {
+  const count = selectedFiles.length;
+  const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+  fileCountEl.textContent = `SELECIONADOS: ${count} ARQUIVO${count !== 1 ? 'S' : ''}`;
+  fileSizeEl.textContent = `TAMANHO TOTAL: ${formatSize(totalSize)}`;
+  submitBtn.disabled = count === 0;
   status.textContent = '';
+  status.className = 'status-message';
 }
 
 document.getElementById('upload-form').addEventListener('submit', async e => {
@@ -74,7 +93,7 @@ document.getElementById('upload-form').addEventListener('submit', async e => {
 
   submitBtn.disabled = true;
   status.textContent = 'Enviando arquivos…';
-  status.className = '';
+  status.className = 'status-message';
   progressSection.classList.add('hidden');
   downloadSection.classList.add('hidden');
   fileProgress.innerHTML = '';
@@ -98,7 +117,7 @@ document.getElementById('upload-form').addEventListener('submit', async e => {
     connectSSE(currentJobId);
   } catch (err) {
     status.textContent = 'Erro: ' + err.message;
-    status.className = 'error';
+    status.className = 'status-message error';
     submitBtn.disabled = false;
   }
 });
@@ -167,9 +186,9 @@ function updateProgress(data) {
     const action = li.querySelector('.file-action');
 
     if (info.status === 'completed') {
-      action.innerHTML = `<a href="/jobs/${currentJobId}/download/${encodeURIComponent(filename)}" class="btn-download-sm">Baixar</a>`;
+      action.innerHTML = `<a href="/jobs/${currentJobId}/download/${encodeURIComponent(filename)}" class="btn-download-sm">BAIXAR</a>`;
     } else if (info.status === 'failed') {
-      action.innerHTML = `<span class="error-msg">${escapeHtml(info.error || 'Erro')}</span><button class="btn-retry-sm" onclick="retryFile('${escapeHtml(filename)}')">Tentar Novamente</button>`;
+      action.innerHTML = `<span class="error-msg">${escapeHtml(info.error || 'Erro')}</span><button class="btn-retry-sm" onclick="retryFile('${escapeHtml(filename)}')">Retry</button>`;
     } else {
       action.innerHTML = '';
     }
@@ -185,20 +204,20 @@ async function retryFile(filename) {
       li.querySelector('.file-action').innerHTML = '';
     }
     status.textContent = 'Processando…';
-    status.className = '';
+    status.className = 'status-message';
     downloadSection.classList.add('hidden');
     jobFinished = false;
     connectSSE(currentJobId);
   } else {
     const err = await res.json().catch(() => ({ detail: 'Erro ao tentar novamente' }));
     status.textContent = 'Erro: ' + (err.detail || 'Falha ao reprocessar');
-    status.className = 'error';
+    status.className = 'status-message error';
   }
 }
 
 function onJobComplete(jobId) {
   status.textContent = 'Processamento concluído!';
-  status.className = 'success';
+  status.className = 'status-message success';
   downloadAllBtn.href = `/jobs/${jobId}/download`;
   downloadSection.classList.remove('hidden');
   submitBtn.disabled = false;
