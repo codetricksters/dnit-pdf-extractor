@@ -174,6 +174,33 @@ async def reset_file_for_retry(job_id: str, filename: str) -> None:
     await _db.commit()
 
 
+async def list_jobs(status_filter: str | None = None) -> list[dict]:
+    if status_filter == "active":
+        where = "WHERE j.completed = 0"
+    elif status_filter == "completed":
+        where = "WHERE j.completed = 1"
+    else:
+        where = ""
+
+    query = f"""
+        SELECT j.job_id, j.created_at, j.completed,
+               COUNT(f.id) AS file_count,
+               SUM(CASE WHEN f.status = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+               SUM(CASE WHEN f.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+               SUM(CASE WHEN f.status = 'processing' THEN 1 ELSE 0 END) AS processing_count,
+               SUM(CASE WHEN f.status = 'pending' THEN 1 ELSE 0 END) AS pending_count
+        FROM jobs j
+        LEFT JOIN file_results f ON j.job_id = f.job_id
+        {where}
+        GROUP BY j.job_id
+        ORDER BY j.created_at DESC
+        LIMIT 50
+    """
+    async with _db.execute(query) as cur:
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def cleanup_stale_jobs(max_age_minutes: int = 1440) -> None:
     cutoff = (datetime.now() - timedelta(minutes=max_age_minutes)).isoformat()
     async with _db.execute(

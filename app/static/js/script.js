@@ -270,6 +270,108 @@ async function reconnectToJob(jobId) {
   }
 }
 
+// Navigation
+const navItems = document.querySelectorAll('.nav-item[data-view]');
+const viewSections = {
+  upload: document.getElementById('view-upload'),
+  queue: document.getElementById('view-queue'),
+  files: document.getElementById('view-files'),
+};
+const pageTitle = document.querySelector('.page-title');
+const pageSubtitle = document.querySelector('.page-subtitle');
+
+const viewMeta = {
+  upload: { title: 'Processador de Medições', subtitle: 'Upload de PDFs DNIT para extração de dados tabulares' },
+  queue: { title: 'Fila de Processamento', subtitle: 'Jobs ativos e em andamento' },
+  files: { title: 'Arquivos Processados', subtitle: 'Jobs concluídos disponíveis para download' },
+};
+
+let queuePollInterval = null;
+
+navItems.forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.preventDefault();
+    const view = item.dataset.view;
+    switchView(view);
+  });
+});
+
+function switchView(view) {
+  navItems.forEach(n => n.classList.toggle('active', n.dataset.view === view));
+  Object.entries(viewSections).forEach(([key, el]) => {
+    if (el) el.classList.toggle('hidden', key !== view);
+  });
+  if (viewMeta[view]) {
+    pageTitle.textContent = viewMeta[view].title;
+    pageSubtitle.textContent = viewMeta[view].subtitle;
+  }
+  if (queuePollInterval) {
+    clearInterval(queuePollInterval);
+    queuePollInterval = null;
+  }
+  if (view === 'queue') {
+    loadQueueView();
+    queuePollInterval = setInterval(loadQueueView, 3000);
+  } else if (view === 'files') {
+    loadFilesView();
+  }
+}
+
+async function loadQueueView() {
+  try {
+    const res = await fetch('/jobs?status=active');
+    if (!res.ok) return;
+    const jobs = await res.json();
+    const list = document.getElementById('queue-list');
+    const empty = document.getElementById('queue-empty');
+    if (!jobs.length) {
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    list.innerHTML = jobs.map(j => renderJobItem(j, false)).join('');
+  } catch {}
+}
+
+async function loadFilesView() {
+  try {
+    const res = await fetch('/jobs?status=completed');
+    if (!res.ok) return;
+    const jobs = await res.json();
+    const list = document.getElementById('files-list');
+    const empty = document.getElementById('files-empty');
+    if (!jobs.length) {
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    list.innerHTML = jobs.map(j => renderJobItem(j, true)).join('');
+  } catch {}
+}
+
+function renderJobItem(job, showDownload) {
+  const date = new Date(job.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const badges = [];
+  if (job.processing_count > 0) badges.push(`<span class="badge badge-processing">${job.processing_count} processando</span>`);
+  if (job.pending_count > 0) badges.push(`<span class="badge badge-pending">${job.pending_count} pendente</span>`);
+  if (job.completed_count > 0) badges.push(`<span class="badge badge-completed">${job.completed_count} concluído</span>`);
+  if (job.failed_count > 0) badges.push(`<span class="badge badge-failed">${job.failed_count} falha</span>`);
+
+  const actions = showDownload
+    ? `<a href="/jobs/${job.job_id}/download" class="btn-download-sm">BAIXAR ZIP</a>`
+    : badges.join(' ');
+
+  return `<li class="job-item">
+    <div class="job-info">
+      <span class="job-id">${job.job_id}</span>
+      <span class="job-meta"><span>${date}</span><span>${job.file_count} arquivo${job.file_count !== 1 ? 's' : ''}</span></span>
+    </div>
+    <div class="job-actions">${showDownload ? badges.join(' ') + ' ' + actions : actions}</div>
+  </li>`;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const savedJobId = localStorage.getItem('dnit_job_id');
   if (savedJobId) {

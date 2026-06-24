@@ -414,7 +414,22 @@ body {
 .file-progress-list {
   list-style: none;
   padding: 0;
+  max-height: 25vh;
+  overflow-y: auto;
   divide-y: 1px solid rgba(69, 70, 77, 0.1);
+}
+
+.file-progress-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.file-progress-list::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+.file-progress-list::-webkit-scrollbar-thumb {
+  background: var(--outline-variant);
+  border-radius: 2px;
 }
 
 .file-item {
@@ -654,6 +669,109 @@ body {
 .main-content::-webkit-scrollbar-thumb {
   background: var(--outline-variant);
   border-radius: 2px;
+}
+
+/* View Sections */
+.view-section.hidden {
+  display: none !important;
+}
+
+.queue-list {
+  list-style: none;
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.queue-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.queue-list::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+.queue-list::-webkit-scrollbar-thumb {
+  background: var(--outline-variant);
+  border-radius: 2px;
+}
+
+.job-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(69, 70, 77, 0.1);
+  transition: background 0.2s;
+}
+
+.job-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.job-item:last-child {
+  border-bottom: none;
+}
+
+.job-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.job-id {
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.job-meta {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  display: flex;
+  gap: 12px;
+}
+
+.job-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.badge-processing {
+  background: rgba(173, 198, 255, 0.15);
+  color: var(--secondary);
+}
+
+.badge-completed {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--success);
+}
+
+.badge-failed {
+  background: rgba(255, 180, 171, 0.15);
+  color: var(--error);
+}
+
+.badge-pending {
+  background: rgba(144, 144, 151, 0.15);
+  color: var(--outline);
+}
+
+.empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--on-surface-variant);
+  font-size: 14px;
 }
 
 /* Responsive */

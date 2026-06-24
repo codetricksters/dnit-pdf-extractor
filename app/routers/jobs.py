@@ -12,6 +12,7 @@ from ..services.file_processor import classify_file, process_ocr_pdf, process_te
 from ..services.job_manager import (
     check_job_completed,
     get_job,
+    list_jobs,
     mark_job_completed,
     notify_change,
     reset_file_for_retry,
@@ -21,6 +22,14 @@ from ..services.job_manager import (
 from ..services.storage import read_result, job_dir
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+@router.get("")
+async def get_jobs(status: str | None = None):
+    if status and status not in ("active", "completed"):
+        raise HTTPException(400, "status must be 'active' or 'completed'")
+    jobs = await list_jobs(status)
+    return jobs
 
 
 def _job_status_dict(job: dict) -> dict:

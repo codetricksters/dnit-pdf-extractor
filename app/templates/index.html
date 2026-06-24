@@ -11,15 +11,15 @@
       <p class="brand-sub">PDF Extractor</p>
     </div>
     <nav class="sidebar-nav">
-      <a href="#" class="nav-item active">
+      <a href="#" class="nav-item active" data-view="upload">
         <span class="material-symbols-outlined">upload_file</span>
         <span>Upload</span>
       </a>
-      <a href="#" class="nav-item">
+      <a href="#" class="nav-item" data-view="queue">
         <span class="material-symbols-outlined">hourglass_empty</span>
         <span>Fila</span>
       </a>
-      <a href="#" class="nav-item">
+      <a href="#" class="nav-item" data-view="files">
         <span class="material-symbols-outlined">folder_open</span>
         <span>Arquivos</span>
       </a>
@@ -43,81 +43,103 @@
     </header>
 
     <div class="content-area">
-      <!-- Upload Card -->
-      <form id="upload-form">
-        <div id="drop-zone" class="drop-zone">
-          <input type="file" id="file-input" name="files" accept=".pdf" multiple />
-          <div class="drop-zone-inner">
-            <div class="drop-icon-container">
-              <span class="material-symbols-outlined drop-icon">upload_file</span>
+      <!-- Upload View -->
+      <div id="view-upload" class="view-section">
+        <form id="upload-form">
+          <div id="drop-zone" class="drop-zone">
+            <input type="file" id="file-input" name="files" accept=".pdf" multiple />
+            <div class="drop-zone-inner">
+              <div class="drop-icon-container">
+                <span class="material-symbols-outlined drop-icon">upload_file</span>
+              </div>
+              <h3 class="drop-title">Arraste os PDFs aqui</h3>
+              <p class="drop-subtitle">Formatos suportados: PDF (Resumo da Medição DNIT). Processamento em lote de múltiplos arquivos.</p>
+              <button type="button" id="select-files-btn" class="btn-secondary">
+                <span class="material-symbols-outlined btn-icon">add</span>
+                SELECIONAR ARQUIVOS
+              </button>
             </div>
-            <h3 class="drop-title">Arraste os PDFs aqui</h3>
-            <p class="drop-subtitle">Formatos suportados: PDF (Resumo da Medição DNIT). Processamento em lote de múltiplos arquivos.</p>
-            <button type="button" id="select-files-btn" class="btn-secondary">
-              <span class="material-symbols-outlined btn-icon">add</span>
-              SELECIONAR ARQUIVOS
+            <div class="drop-corner drop-corner-tl"></div>
+            <div class="drop-corner drop-corner-tr"></div>
+            <div class="drop-corner drop-corner-bl"></div>
+            <div class="drop-corner drop-corner-br"></div>
+          </div>
+
+          <div class="upload-footer">
+            <div class="file-stats">
+              <span id="file-count" class="stat-label">SELECIONADOS: 0 ARQUIVOS</span>
+              <span class="stat-divider">|</span>
+              <span id="file-size" class="stat-label">TAMANHO TOTAL: 0 KB</span>
+            </div>
+            <button type="submit" id="submit-btn" disabled class="btn-primary">
+              Enviar para Processamento
             </button>
           </div>
-          <div class="drop-corner drop-corner-tl"></div>
-          <div class="drop-corner drop-corner-tr"></div>
-          <div class="drop-corner drop-corner-bl"></div>
-          <div class="drop-corner drop-corner-br"></div>
+        </form>
+
+        <div id="status" class="status-message"></div>
+
+        <div id="progress-section" class="hidden">
+          <div class="progress-card">
+            <div class="progress-header">
+              <h3 class="progress-title">FILA DE PROCESSAMENTO</h3>
+              <span id="progress-count" class="progress-count"></span>
+            </div>
+            <ul id="file-progress" class="file-progress-list"></ul>
+            <div id="download-section" class="hidden download-section">
+              <a id="download-all-btn" class="btn-success">
+                <span class="material-symbols-outlined btn-icon">download</span>
+                Baixar Todos (.zip)
+              </a>
+            </div>
+            <button id="reset-btn" class="btn-reset hidden">
+              <span class="material-symbols-outlined btn-icon">refresh</span>
+              Novo Processamento
+            </button>
+          </div>
         </div>
 
-        <div class="upload-footer">
-          <div class="file-stats">
-            <span id="file-count" class="stat-label">SELECIONADOS: 0 ARQUIVOS</span>
-            <span class="stat-divider">|</span>
-            <span id="file-size" class="stat-label">TAMANHO TOTAL: 0 KB</span>
+        <div class="info-grid">
+          <div class="info-card info-card-accent">
+            <span class="material-symbols-outlined info-icon">bolt</span>
+            <h4 class="info-title">Processamento Rápido</h4>
+            <p class="info-text">OCR e extração otimizados para PDFs de medição DNIT.</p>
           </div>
-          <button type="submit" id="submit-btn" disabled class="btn-primary">
-            Enviar para Processamento
-          </button>
-        </div>
-      </form>
-
-      <div id="status" class="status-message"></div>
-
-      <!-- Progress Section -->
-      <div id="progress-section" class="hidden">
-        <div class="progress-card">
-          <div class="progress-header">
-            <h3 class="progress-title">FILA DE PROCESSAMENTO</h3>
-            <span id="progress-count" class="progress-count"></span>
+          <div class="info-card">
+            <span class="material-symbols-outlined info-icon">table_chart</span>
+            <h4 class="info-title">Dados Estruturados</h4>
+            <p class="info-text">Exportação em JSON com todos os campos da tabela principal.</p>
           </div>
-          <ul id="file-progress" class="file-progress-list"></ul>
-          <div id="download-section" class="hidden download-section">
-            <a id="download-all-btn" class="btn-success">
-              <span class="material-symbols-outlined btn-icon">download</span>
-              Baixar Todos (.zip)
-            </a>
+          <div class="info-card info-card-wide">
+            <div class="info-card-row">
+              <div>
+                <h4 class="info-title">Lote de Arquivos</h4>
+                <p class="info-text">Envie múltiplos PDFs de uma vez. Cada arquivo é processado individualmente com download separado ou compactado em .zip.</p>
+              </div>
+            </div>
           </div>
-          <button id="reset-btn" class="btn-reset hidden">
-            <span class="material-symbols-outlined btn-icon">refresh</span>
-            Novo Processamento
-          </button>
         </div>
       </div>
 
-      <!-- Info Cards -->
-      <div class="info-grid">
-        <div class="info-card info-card-accent">
-          <span class="material-symbols-outlined info-icon">bolt</span>
-          <h4 class="info-title">Processamento Rápido</h4>
-          <p class="info-text">OCR e extração otimizados para PDFs de medição DNIT.</p>
-        </div>
-        <div class="info-card">
-          <span class="material-symbols-outlined info-icon">table_chart</span>
-          <h4 class="info-title">Dados Estruturados</h4>
-          <p class="info-text">Exportação em JSON com todos os campos da tabela principal.</p>
-        </div>
-        <div class="info-card info-card-wide">
-          <div class="info-card-row">
-            <div>
-              <h4 class="info-title">Lote de Arquivos</h4>
-              <p class="info-text">Envie múltiplos PDFs de uma vez. Cada arquivo é processado individualmente com download separado ou compactado em .zip.</p>
-            </div>
+      <!-- Queue View (Fila) -->
+      <div id="view-queue" class="view-section hidden">
+        <div class="progress-card">
+          <div class="progress-header">
+            <h3 class="progress-title">JOBS EM PROCESSAMENTO</h3>
           </div>
+          <ul id="queue-list" class="queue-list"></ul>
+          <div id="queue-empty" class="empty-state hidden">Nenhum job em processamento</div>
+        </div>
+      </div>
+
+      <!-- Files View (Arquivos) -->
+      <div id="view-files" class="view-section hidden">
+        <div class="progress-card">
+          <div class="progress-header">
+            <h3 class="progress-title">JOBS CONCLUÍDOS</h3>
+          </div>
+          <ul id="files-list" class="queue-list"></ul>
+          <div id="files-empty" class="empty-state hidden">Nenhum arquivo processado</div>
         </div>
       </div>
     </div>

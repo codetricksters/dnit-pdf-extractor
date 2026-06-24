@@ -11,6 +11,12 @@ from PIL import Image
 from .extractor import EXPECTED_COLUMNS, _PERIODO_LIQUIDO_RE
 from .number_parser import convert_numeric_columns
 
+# More tolerant regex for OCR text: colon is optional, "/" can be misread, dash between dates optional
+_PERIODO_LIQUIDO_OCR_RE = re.compile(
+    r"Per[ií]odo\s+L[ií]quido[:\s]*(\d{2}[/lI|]\d{2}[/lI|]\d{4})\s*[-–—]?\s*(\d{2}[/lI|]\d{2}[/lI|]\d{4})",
+    re.IGNORECASE,
+)
+
 _SERVICE_CODE_RE = re.compile(r"^\d{4,}")
 
 _HEADER_KEYWORDS = ("serviço", "servico", "descrição", "descricao", "código", "codigo")
@@ -344,10 +350,12 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str, *, job_id: str | N
             pages = pdf.pages
             if not pages:
                 raise ExtractionError(f"No pages found in '{source_name}'.")
-            page_text = pages[0].extract_text() or ""
-            m = _PERIODO_LIQUIDO_RE.search(page_text)
-            if m:
-                periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+            for page in pages:
+                page_text = page.extract_text() or ""
+                m = _PERIODO_LIQUIDO_RE.search(page_text)
+                if m:
+                    periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+                    break
 
         pdf2 = pdfplumber.open(io.BytesIO(file_bytes))
         all_page_rows = _extract_pages_via_disk(pdf2, source_name, job_id)
@@ -357,10 +365,12 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str, *, job_id: str | N
             if not pages:
                 raise ExtractionError(f"No pages found in '{source_name}'.")
 
-            page_text = pages[0].extract_text() or ""
-            m = _PERIODO_LIQUIDO_RE.search(page_text)
-            if m:
-                periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+            for page in pages:
+                page_text = page.extract_text() or ""
+                m = _PERIODO_LIQUIDO_RE.search(page_text)
+                if m:
+                    periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+                    break
 
             first_image = _pdf_page_to_image(pages[0])
             rotation = _detect_orientation(first_image)
@@ -383,9 +393,11 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str, *, job_id: str | N
         ocr_text = " ".join(
             item["text"] for row in all_page_rows for item in row
         )
-        m = _PERIODO_LIQUIDO_RE.search(ocr_text)
+        m = _PERIODO_LIQUIDO_RE.search(ocr_text) or _PERIODO_LIQUIDO_OCR_RE.search(ocr_text)
         if m:
-            periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+            d1 = re.sub(r"[lI|]", "/", m.group(1))
+            d2 = re.sub(r"[lI|]", "/", m.group(2))
+            periodo_liquido = f"{d1} - {d2}"
 
     header_result = _find_header_row(all_page_rows)
     if header_result is None:
