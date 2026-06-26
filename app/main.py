@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .routers import upload
 from .routers import jobs
+from .dashboard import create_dash_app
 from .services.job_manager import cleanup_stale_jobs, init_db, close_db
 
 BASE_DIR = Path(__file__).parent
@@ -46,3 +47,5 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 app.include_router(upload.router)
 app.include_router(jobs.router)
+
+app.mount("/dashboard", create_dash_app())

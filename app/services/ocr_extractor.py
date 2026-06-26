@@ -37,15 +37,22 @@ _COLUMN_HEADER_MAP = [
 ]
 
 _reader: easyocr.Reader | None = None
+_reader_cpu: easyocr.Reader | None = None
+_use_gpu: bool = torch.cuda.is_available()
 
 gpu_available = torch.cuda.is_available()
 
 
-def _get_reader() -> easyocr.Reader:
-    global _reader
-    if _reader is None:
-        _reader = easyocr.Reader(["pt"], gpu=gpu_available)
-    return _reader
+def _get_reader(gpu: bool = True) -> easyocr.Reader:
+    global _reader, _reader_cpu
+    if gpu and _use_gpu:
+        if _reader is None:
+            _reader = easyocr.Reader(["pt"], gpu=True)
+        return _reader
+    else:
+        if _reader_cpu is None:
+            _reader_cpu = easyocr.Reader(["pt"], gpu=False)
+        return _reader_cpu
 
 
 def _pdf_page_to_image(page) -> Image.Image:
@@ -53,7 +60,15 @@ def _pdf_page_to_image(page) -> Image.Image:
 
 
 def _ocr_image(image: np.ndarray) -> list[tuple]:
-    reader = _get_reader()
+    global _use_gpu
+    if _use_gpu:
+        try:
+            reader = _get_reader(gpu=True)
+            return reader.readtext(image, paragraph=False)
+        except torch.cuda.OutOfMemoryError:
+            torch.cuda.empty_cache()
+            _use_gpu = False
+    reader = _get_reader(gpu=False)
     return reader.readtext(image, paragraph=False)
 
 

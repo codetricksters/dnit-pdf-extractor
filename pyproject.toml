@@ -16,6 +16,9 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "easyocr>=1.7.2",
     "aiosqlite>=0.20.0",
+    "dash>=4.3.0",
+    "dash-bootstrap-components>=2.0.4",
+    "a2wsgi>=1.10.10",
 ]
 
 [dependency-groups]
