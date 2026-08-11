@@ -1,0 +1,11 @@
+services:
+  dnit-pdf-extractor:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+    volumes:
+      # Mount tmp directory for local testing (optional)
+      - ./tmp:/app/tmp
+    restart: unless-stopped

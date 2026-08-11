@@ -16,6 +16,14 @@ wheels/
 .env.local
 .env.*.local
 
+# Docker exports and temporary files
+*.tar
+*.tar.gz
+tmp/
+
+# Editor temp files
+vmw
+
 
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,microsoftoffice,python,jupyternotebooks,virtualenv,dotenv
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,microsoftoffice,python,jupyternotebooks,virtualenv,dotenv
