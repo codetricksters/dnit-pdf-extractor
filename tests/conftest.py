@@ -57,6 +57,19 @@ def make_rows(source: str) -> list[dict]:
     return [_row("56988", "Pavimentação asfáltica"), _row("54393", "Terraplenagem geral")]
 
 
+def make_result(source: str) -> dict:
+    """Build a full extract_from_pdf-style result dict for use in mocks."""
+    return {
+        "header": {
+            "Contrato": "TEST-CONTRACT",
+            "Data Base": "01/01/2021",
+            "Período Líquido": "01/02/2024 - 29/02/2024",
+            "Número do Processo": "50606.000509/2021-44",
+        },
+        "rows": make_rows(source),
+    }
+
+
 def make_pdfplumber_mock(tables_per_page: list[list[list]], page_text: str = "") -> MagicMock:
     """Return a mock that mimics pdfplumber's context-manager + pages API."""
     mock_pdf = MagicMock()
