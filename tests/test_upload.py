@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from .conftest import make_rows, make_result
+from .conftest import make_result
 from .pdf_factory import corrupt_pdf, no_table_pdf
 
 

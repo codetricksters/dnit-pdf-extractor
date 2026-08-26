@@ -267,6 +267,7 @@ def test_extract_header_periodo_liquido():
     with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
         result = extract_from_pdf(b"fakebytes", "medicao.pdf")
     assert result["header"]["Período Líquido"] == "01/02/2024 - 29/02/2024"
+    assert result["rows"][0]["Período Líquido"] == "01/02/2024 - 29/02/2024"
 
 
 def test_extract_header_numero_processo():

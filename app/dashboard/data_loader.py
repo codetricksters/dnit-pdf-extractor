@@ -54,7 +54,9 @@ def _load_all_json_records() -> list[dict]:
         try:
             with open(json_file) as f:
                 data = json.load(f)
-            if isinstance(data, list):
+            if isinstance(data, dict):
+                records.extend(data.get("rows", []))
+            elif isinstance(data, list):
                 records.extend(data)
         except (json.JSONDecodeError, OSError):
             continue

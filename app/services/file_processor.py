@@ -28,8 +28,8 @@ def process_text_pdf(file_bytes: bytes, filename: str, job_id: str) -> tuple[str
 
 
 def process_ocr_pdf(file_bytes: bytes, filename: str, job_id: str) -> tuple[str, str | None]:
-    header = extract_header(file_bytes, filename)
     try:
+        header = extract_header(file_bytes, filename)
         rows = extract_from_pdf_ocr(file_bytes, filename, job_id=job_id)
     except ExtractionError as e:
         return ("", str(e))

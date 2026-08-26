@@ -39,7 +39,7 @@ _PERIODO_LIQUIDO_RE = re.compile(
 _SECTION_HEADER_RE = re.compile(r"^\d+[,.]\d+\s*-")
 
 _CONTRATO_RE = re.compile(
-    r"CONTRATO:\s*(.+?)(?:\n|$)",
+    r"\bCONTRATO:\s*(.+?)(?:\n|$)",
     re.IGNORECASE,
 )
 _DATA_BASE_RE = re.compile(
