@@ -38,6 +38,19 @@ _PERIODO_LIQUIDO_RE = re.compile(
 # Matches section header rows: "1,0 - GRUPO 1 -", "17,1 - GRUPO 6 -", etc.
 _SECTION_HEADER_RE = re.compile(r"^\d+[,.]\d+\s*-")
 
+_CONTRATO_RE = re.compile(
+    r"CONTRATO:\s*(.+?)(?:\n|$)",
+    re.IGNORECASE,
+)
+_DATA_BASE_RE = re.compile(
+    r"Data\s+Base:\s*(\d{2}/\d{2}/\d{4})",
+    re.IGNORECASE,
+)
+_NUMERO_PROCESSO_RE = re.compile(
+    r"N[uú]mero\s+do\s+Processo:\s*([\d./\-]+)",
+    re.IGNORECASE,
+)
+
 
 
 
@@ -138,7 +151,37 @@ def _normalize_header(raw_header: list) -> list:
     return result
 
 
-def extract_from_pdf(file_bytes: bytes, source_name: str) -> list[dict]:
+def extract_header(file_bytes: bytes, source_name: str) -> dict:
+    result = {"Contrato": "", "Data Base": "", "Período Líquido": "", "Número do Processo": ""}
+    try:
+        pdf = pdfplumber.open(io.BytesIO(file_bytes))
+    except Exception:
+        return result
+    with pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            if not result["Contrato"]:
+                m = _CONTRATO_RE.search(text)
+                if m:
+                    result["Contrato"] = m.group(1).strip()
+            if not result["Data Base"]:
+                m = _DATA_BASE_RE.search(text)
+                if m:
+                    result["Data Base"] = m.group(1)
+            if not result["Período Líquido"]:
+                m = _PERIODO_LIQUIDO_RE.search(text)
+                if m:
+                    result["Período Líquido"] = f"{m.group(1)} - {m.group(2)}"
+            if not result["Número do Processo"]:
+                m = _NUMERO_PROCESSO_RE.search(text)
+                if m:
+                    result["Número do Processo"] = m.group(1)
+            if all(result.values()):
+                break
+    return result
+
+
+def extract_from_pdf(file_bytes: bytes, source_name: str) -> dict:
     try:
         pdf = pdfplumber.open(io.BytesIO(file_bytes))
     except Exception as exc:
@@ -147,15 +190,33 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> list[dict]:
     header: list | None = None
     records: list[dict] = []
     current_record: dict | None = None
+    contrato: str = ""
+    data_base: str = ""
     periodo_liquido: str = ""
+    numero_processo: str = ""
+    _header_done: bool = False
 
     with pdf:
         for page in pdf.pages:
-            if not periodo_liquido:
+            if not _header_done:
                 page_text = page.extract_text() or ""
-                m = _PERIODO_LIQUIDO_RE.search(page_text)
-                if m:
-                    periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+                if not contrato:
+                    m = _CONTRATO_RE.search(page_text)
+                    if m:
+                        contrato = m.group(1).strip()
+                if not data_base:
+                    m = _DATA_BASE_RE.search(page_text)
+                    if m:
+                        data_base = m.group(1)
+                if not periodo_liquido:
+                    m = _PERIODO_LIQUIDO_RE.search(page_text)
+                    if m:
+                        periodo_liquido = f"{m.group(1)} - {m.group(2)}"
+                if not numero_processo:
+                    m = _NUMERO_PROCESSO_RE.search(page_text)
+                    if m:
+                        numero_processo = m.group(1)
+                _header_done = bool(contrato and data_base and periodo_liquido and numero_processo)
             tables = page.extract_tables()
             for table in tables:
                 if not table:
@@ -222,4 +283,10 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> list[dict]:
         row["Source_File"] = source_name
         convert_numeric_columns(row)
 
-    return records
+    header_dict = {
+        "Contrato": contrato,
+        "Data Base": data_base,
+        "Período Líquido": periodo_liquido,
+        "Número do Processo": numero_processo,
+    }
+    return {"header": header_dict, "rows": records}

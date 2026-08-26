@@ -14,6 +14,7 @@ from app.services.extractor import (
     _normalize_header,
     _row_is_dangling,
     extract_from_pdf,
+    extract_header,
     parse_br_number,
 )
 
@@ -162,19 +163,20 @@ def test_extract_raises_when_no_table_found():
 
 # --- extract_from_pdf (happy path — mock pdfplumber) ---
 
-def test_extract_returns_list_of_dicts():
+def test_extract_returns_dict_with_rows():
     mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]])
     with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
         result = extract_from_pdf(b"fakebytes", "medicao.pdf")
-    assert isinstance(result, list)
-    assert len(result) == 2
+    assert isinstance(result, dict)
+    assert isinstance(result["rows"], list)
+    assert len(result["rows"]) == 2
 
 
 def test_extract_each_row_has_source_file():
     mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]])
     with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
         result = extract_from_pdf(b"fakebytes", "medicao.pdf")
-    for row in result:
+    for row in result["rows"]:
         assert row.get("Source_File") == "medicao.pdf"
 
 
@@ -182,7 +184,7 @@ def test_extract_rows_have_expected_columns():
     mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]])
     with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
         result = extract_from_pdf(b"fakebytes", "medicao.pdf")
-    for row in result:
+    for row in result["rows"]:
         for col in EXPECTED_COLUMNS:
             assert col in row
 
@@ -197,8 +199,8 @@ def test_extract_dangling_row_merged_into_previous():
     mock_pdf = make_pdfplumber_mock([[table]])
     with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
         result = extract_from_pdf(b"fakebytes", "merge.pdf")
-    assert len(result) == 1
-    assert "continuation" in result[0]["Descrição"]
+    assert len(result["rows"]) == 1
+    assert "continuation" in result["rows"][0]["Descrição"]
 
 
 def test_extract_indices_rows_are_skipped():
@@ -210,7 +212,7 @@ def test_extract_indices_rows_are_skipped():
     mock_pdf = make_pdfplumber_mock([[table]])
     with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
         result = extract_from_pdf(b"fakebytes", "test.pdf")
-    services = [r["Serviço"] for r in result]
+    services = [r["Serviço"] for r in result["rows"]]
     assert "ADLOC" not in services
 
 
@@ -224,4 +226,67 @@ def test_extract_repeated_header_rows_are_ignored():
     with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
         result = extract_from_pdf(b"fakebytes", "multi.pdf")
     # 2 from page 1 + 1 from page 2 (header skipped) = 3
-    assert len(result) == 3
+    assert len(result["rows"]) == 3
+
+
+# --- header extraction tests ---
+
+HEADER_TEXT = (
+    "CONTRATO: 06 00134/2022 - HWN ENGENHARIA LTDA\n"
+    "Data Base: 01/01/2021\n"
+    "Período Líquido: 01/02/2024 - 29/02/2024\n"
+    "Número do Processo: 50606.000509/2021-44\n"
+)
+
+
+def test_extract_from_pdf_returns_dict_with_header_and_rows():
+    mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]], page_text=HEADER_TEXT)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "medicao.pdf")
+    assert isinstance(result, dict)
+    assert "header" in result
+    assert "rows" in result
+
+
+def test_extract_header_contrato():
+    mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]], page_text=HEADER_TEXT)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "medicao.pdf")
+    assert result["header"]["Contrato"] == "06 00134/2022 - HWN ENGENHARIA LTDA"
+
+
+def test_extract_header_data_base():
+    mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]], page_text=HEADER_TEXT)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "medicao.pdf")
+    assert result["header"]["Data Base"] == "01/01/2021"
+
+
+def test_extract_header_periodo_liquido():
+    mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]], page_text=HEADER_TEXT)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "medicao.pdf")
+    assert result["header"]["Período Líquido"] == "01/02/2024 - 29/02/2024"
+
+
+def test_extract_header_numero_processo():
+    mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]], page_text=HEADER_TEXT)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "medicao.pdf")
+    assert result["header"]["Número do Processo"] == "50606.000509/2021-44"
+
+
+def test_extract_header_missing_fields_default_to_empty_string():
+    mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]], page_text="")
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "medicao.pdf")
+    assert result["header"]["Contrato"] == ""
+    assert result["header"]["Data Base"] == ""
+
+
+def test_extract_header_standalone_function():
+    mock_pdf = make_pdfplumber_mock([[]], page_text=HEADER_TEXT)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        header = extract_header(b"fakebytes", "medicao.pdf")
+    assert header["Contrato"] == "06 00134/2022 - HWN ENGENHARIA LTDA"
+    assert header["Número do Processo"] == "50606.000509/2021-44"
