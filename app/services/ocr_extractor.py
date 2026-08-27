@@ -1,10 +1,9 @@
 import io
 import re
+import shutil
 
-import easyocr
 import numpy as np
 import pdfplumber
-import torch
 from .exceptions import ExtractionError
 from PIL import Image
 
@@ -36,15 +35,61 @@ _COLUMN_HEADER_MAP = [
     ("ajuste", "contratual"),
 ]
 
-_reader: easyocr.Reader | None = None
-_reader_cpu: easyocr.Reader | None = None
-_use_gpu: bool = torch.cuda.is_available()
+# --- Tesseract (primary OCR engine) ---
 
-gpu_available = torch.cuda.is_available()
+_TESSERACT_AVAILABLE: bool | None = None  # None = not yet checked
 
 
-def _get_reader(gpu: bool = True) -> easyocr.Reader:
-    global _reader, _reader_cpu
+def _tesseract_available() -> bool:
+    global _TESSERACT_AVAILABLE
+    if _TESSERACT_AVAILABLE is None:
+        _TESSERACT_AVAILABLE = shutil.which("tesseract") is not None
+    return _TESSERACT_AVAILABLE
+
+
+def _ocr_image_tesseract(pil_image: Image.Image) -> list[tuple]:
+    """Run Tesseract and return results in EasyOCR-compatible format."""
+    import pytesseract
+
+    config = r"--oem 3 --psm 3 -l por+eng"
+    data = pytesseract.image_to_data(
+        pil_image.convert("L"),  # grayscale
+        config=config,
+        output_type=pytesseract.Output.DICT,
+    )
+
+    results = []
+    for i in range(len(data["text"])):
+        text = data["text"][i].strip()
+        conf = int(data["conf"][i])
+        if conf < 10 or not text:
+            continue
+        x = data["left"][i]
+        y = data["top"][i]
+        w = data["width"][i]
+        h = data["height"][i]
+        bbox = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+        results.append((bbox, text, conf / 100.0))
+    return results
+
+
+# --- EasyOCR (fallback when Tesseract is not installed) ---
+
+_reader = None
+_reader_cpu = None
+_use_gpu = False
+
+try:
+    import torch
+    import easyocr
+    _use_gpu = torch.cuda.is_available()
+    _EASYOCR_AVAILABLE = True
+except ImportError:
+    _EASYOCR_AVAILABLE = False
+
+
+def _get_reader(gpu: bool = True):
+    global _reader, _reader_cpu, _use_gpu
     if gpu and _use_gpu:
         if _reader is None:
             _reader = easyocr.Reader(["pt"], gpu=True)
@@ -55,31 +100,35 @@ def _get_reader(gpu: bool = True) -> easyocr.Reader:
         return _reader_cpu
 
 
+def _ocr_image_easyocr(image: np.ndarray) -> list[tuple]:
+    global _use_gpu
+    if _use_gpu:
+        try:
+            return _get_reader(gpu=True).readtext(image, paragraph=False)
+        except Exception:
+            _use_gpu = False
+    return _get_reader(gpu=False).readtext(image, paragraph=False)
+
+
 def _pdf_page_to_image(page) -> Image.Image:
     return page.to_image(resolution=300).original.convert("RGB")
 
 
-def _ocr_image(image: np.ndarray) -> list[tuple]:
-    global _use_gpu
-    if _use_gpu:
-        try:
-            reader = _get_reader(gpu=True)
-            return reader.readtext(image, paragraph=False)
-        except torch.cuda.OutOfMemoryError:
-            torch.cuda.empty_cache()
-            _use_gpu = False
-    reader = _get_reader(gpu=False)
-    return reader.readtext(image, paragraph=False)
+def _ocr_image(pil_image: Image.Image) -> list[tuple]:
+    """Run OCR using Tesseract (preferred) or EasyOCR (fallback)."""
+    if _tesseract_available():
+        return _ocr_image_tesseract(pil_image)
+    if _EASYOCR_AVAILABLE:
+        return _ocr_image_easyocr(np.array(pil_image))
+    raise ExtractionError(
+        "No OCR engine available. Install Tesseract: "
+        "sudo apt-get install tesseract-ocr tesseract-ocr-por"
+    )
 
 
 def _detect_orientation(pil_image: Image.Image) -> int:
-    """Detect if the page needs rotation. Returns the rotation angle (0 or -90).
-
-    Runs OCR on original and rotated versions of the first page, comparing
-    average text length to determine correct orientation.
-    """
-    image = np.array(pil_image)
-    results = _ocr_image(image)
+    """Detect if the page needs rotation. Returns the rotation angle (0 or -90)."""
+    results = _ocr_image(pil_image)
 
     if not results:
         return 0
@@ -91,8 +140,7 @@ def _detect_orientation(pil_image: Image.Image) -> int:
         return 0
 
     rotated = pil_image.rotate(-90, expand=True)
-    rotated_image = np.array(rotated)
-    results_rotated = _ocr_image(rotated_image)
+    results_rotated = _ocr_image(rotated)
 
     if not results_rotated:
         return 0
@@ -105,10 +153,10 @@ def _detect_orientation(pil_image: Image.Image) -> int:
     return 0
 
 
-def _prepare_page_image(pil_image: Image.Image, rotation: int) -> np.ndarray:
+def _prepare_page_image(pil_image: Image.Image, rotation: int) -> Image.Image:
     if rotation != 0:
         pil_image = pil_image.rotate(rotation, expand=True)
-    return np.array(pil_image)
+    return pil_image
 
 
 def _cluster_rows(results: list[tuple], tolerance: int = 20) -> list[list[dict]]:
@@ -336,12 +384,12 @@ def _extract_pages_via_disk(pdf, source_name: str, job_id: str) -> list[list[dic
     all_page_rows: list[list[dict]] = []
     for path in page_image_paths:
         pil_image = Image.open(path)
-        image = _prepare_page_image(pil_image, rotation)
-        results = _ocr_image(image)
+        prepared = _prepare_page_image(pil_image, rotation)
+        results = _ocr_image(prepared)
         if results:
             rows = _cluster_rows(results)
             all_page_rows.extend(rows)
-        del image, pil_image
+        del prepared, pil_image
         path.unlink(missing_ok=True)
 
     return all_page_rows
@@ -393,8 +441,8 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str, *, job_id: str | N
             all_page_rows: list[list[dict]] = []
             for page in pages:
                 pil_image = _pdf_page_to_image(page)
-                image = _prepare_page_image(pil_image, rotation)
-                results = _ocr_image(image)
+                prepared = _prepare_page_image(pil_image, rotation)
+                results = _ocr_image(prepared)
                 if results:
                     rows = _cluster_rows(results)
                     all_page_rows.extend(rows)

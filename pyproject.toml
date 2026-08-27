@@ -19,6 +19,8 @@ dependencies = [
     "dash>=4.3.0",
     "dash-bootstrap-components>=2.0.4",
     "a2wsgi>=1.10.10",
+    "pymupdf>=1.28.2",
+    "pytesseract>=0.3.13",
 ]
 
 [dependency-groups]
