@@ -9,6 +9,10 @@ Every screen is rendered on demand by a callback rather than at start-up: the
 data changes while the application runs (a PDF is uploaded, an índice is
 published) and a layout built at import time would show a stale picture until
 restart.
+
+The visual vocabulary is the one in ``style.css`` (panels, notices, badges,
+stat cards): the screens here and the upload page are the same interface, so a
+class name is preferred over an inline style dict wherever Dash allows it.
 """
 
 from dash import dash_table, dcc, html
@@ -25,6 +29,7 @@ from .layout import (
     STYLE_FILTER,
     STYLE_HEADER,
     STYLE_INPUT,
+    icone,
 )
 
 ROTULOS_CADASTRO = {
@@ -37,98 +42,217 @@ ROTULOS_CADASTRO = {
     "contratada": "Contratada",
 }
 
+# The hint under each field, so the user knows what the export expects before
+# typing. "Opcional" means the spreadsheet is generated with the field blank.
+DICAS_CADASTRO = {
+    "edital": "Obrigatório",
+    "rodovia": "BR / UF",
+    "trecho": "Delimitação",
+    "subtrecho": "Delimitação",
+    "segmento": "Quilometragem",
+    "extensao": "km",
+    "contratada": "Razão social",
+}
 
-def _alerta(mensagens: list[str], cor: str = "warning"):
-    if not mensagens:
-        return None
-    return dbc.Alert(
-        [html.Div(m) for m in mensagens], color=cor, className="mb-3"
+# Which spreadsheet column each on-screen column becomes, and the letter of the
+# equation it carries. The audit is done side by side with the .xlsx, so the
+# correspondence is on the header instead of in the user's memory.
+COLUNA_PLANILHA = {
+    "Período": ("B", ""),
+    "Descrição": ("C", ""),
+    "Valor a PI": ("D", "a"),
+    "Fator de Reajuste": ("E", ""),
+    "Reajustamento da Medição (R)": ("F", "b"),
+    "∆P": ("G", "d"),
+    "Reajustamento Total Base Produtor": ("H", "c = a*d"),
+    "REF Bruto com Lucro": ("I", "e = c - b"),
+    "REF sem Lucro": ("J", "f = e*(1-5,11%)"),
+}
+
+
+def _brl(valor) -> str:
+    """Brazilian formatting, as the user checks it against the spreadsheet."""
+    return f"{valor:,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
+def _aviso(titulo: str, texto, *, tipo: str = "warn", icone_nome: str = "warning",
+           acoes: list | None = None):
+    """The notice block: a reason, and the buttons that resolve it.
+
+    ``DESIGN.md`` asks for the blocked export to be *actionable* — the reason and
+    the way out in the same place, never a disabled button with no explanation.
+    """
+    classes = {"warn": "notice", "ok": "notice ok", "danger": "notice danger",
+               "info": "notice info"}
+    return html.Div(
+        [
+            html.Div(icone(icone_nome), className="notice-icon"),
+            html.Div(
+                [
+                    html.P(titulo, className="notice-title"),
+                    html.Div(texto, className="notice-text"),
+                    html.Div(acoes, className="notice-actions") if acoes else None,
+                ]
+            ),
+        ],
+        className=classes[tipo],
     )
+
+
+def _cartao_kpi(rotulo: str, valor: str, nota: str, icone_nome: str, tom: str = ""):
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.P(rotulo, className="stat-label"),
+                    html.P(html.Span(valor, className="num-strong"), className="stat-value"),
+                    html.P([icone(icone_nome), nota], className="stat-note"),
+                ],
+                className="stat-body",
+            ),
+            html.Div(icone(icone_nome), className=f"stat-icon {tom}".strip()),
+        ],
+        className="stat-card",
+    )
+
+
+def _painel(titulo: str, icone_nome: str, corpo, *, subtitulo: str = "",
+            acoes=None, rodape=None, rodape_classe: str = "", flush: bool = False):
+    return html.Section(
+        [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H2([icone(icone_nome), titulo], className="panel-title"),
+                            html.P(subtitulo, className="panel-subtitle") if subtitulo else None,
+                        ]
+                    ),
+                    html.Div(acoes, className="page-actions") if acoes else None,
+                ],
+                className="panel-head",
+            ),
+            html.Div(corpo, className="panel-body flush" if flush else "panel-body"),
+            html.Div(rodape, className=f"panel-foot {rodape_classe}".strip()) if rodape else None,
+        ],
+        className="panel mt-lg",
+    )
+
+
+# --------------------------------------------------------------- Reequilíbrio
 
 
 def tela_reequilibrio(
     contrato: dict | None, tabelas: dict, pendencias: list[str], lucro: float = DEFAULT_LUCRO
 ):
-    """The calculation tables, one card per product, plus the download button."""
+    """The calculation matrix, one panel per product, plus the download button."""
     if contrato is None:
-        return _alerta(
-            ["Selecione um contrato. Se a lista está vazia, envie os PDFs das "
-             "medições na página do extrator."]
+        return _aviso(
+            "Nenhum contrato selecionado",
+            "Escolha um contrato acima. Se a lista está vazia, envie os PDFs das "
+            "medições na página do extrator.",
+            tipo="info",
+            icone_nome="info",
+            acoes=[
+                html.A([icone("upload_file"), "Ir para o Upload"], href="/",
+                       className="btn btn-primary")
+            ],
         )
 
-    cartoes = []
-    for indice, (produto, df) in enumerate(tabelas.items()):
-        cartoes.append(_cartao_produto(indice, produto, df))
-
+    liberado = bool(tabelas and not pendencias)
     total = sum(df["REF sem Lucro"].sum() for df in tabelas.values())
+    total_pi = sum(df["Valor a PI"].sum() for df in tabelas.values())
+    total_r = sum(df["Reajustamento da Medição (R)"].sum() for df in tabelas.values())
+    total_bruto = sum(df["REF Bruto com Lucro"].sum() for df in tabelas.values())
 
     return html.Div(
         [
-            _cabecalho_contrato(contrato),
-            _alerta(pendencias),
-            _campo_lucro(lucro),
-            *cartoes,
-            _cartao_total(total),
-            _barra_de_exportacao(contrato["numero"], bool(tabelas and not pendencias)),
+            _faixa_contrato(contrato),
+            _bloco_de_exportacao(contrato["numero"], liberado, pendencias, lucro),
+            html.Div(
+                [
+                    _cartao_kpi("Valor total medido a PI", _brl(total_pi),
+                                "Coluna D da planilha", "payments"),
+                    _cartao_kpi("Reajustamento contratual (R)", _brl(total_r),
+                                "Coluna F, já calculada no PDF", "sync_alt"),
+                    _cartao_kpi("REF bruto com lucro", _brl(total_bruto),
+                                "Coluna I, art. 16", "trending_up"),
+                    _cartao_kpi("REF sem lucro", _brl(total), "Coluna J — o pedido",
+                                "verified", "ok" if liberado else "warn"),
+                ],
+                className="card-grid mt-lg",
+            ),
+            *[
+                _painel(
+                    produto,
+                    "table_view",
+                    _matriz(indice, df),
+                    subtitulo="Agrupado por produto; o subtotal repete o da planilha.",
+                    rodape=[
+                        html.Span("Subtotal REF sem lucro", className="label-md label-caps"),
+                        html.Span(_brl(df["REF sem Lucro"].sum()), className="num-strong"),
+                    ],
+                    rodape_classe="subtotal",
+                    flush=True,
+                )
+                for indice, (produto, df) in enumerate(tabelas.items())
+            ],
+            html.Div(
+                [
+                    html.Span("Total geral REF consolidado",
+                              className="label-md label-caps"),
+                    html.Span(_brl(total), className="num-strong"),
+                ],
+                className="batch-actions mt-lg grand-total",
+            ),
+            _painel(
+                "Memória de cálculo",
+                "functions",
+                html.Div([html.P(linha, className="body-md muted") for linha in LEGENDA]),
+                subtitulo="A mesma legenda que acompanha a equação no template.",
+            ),
         ]
     )
 
 
-def _campo_lucro(lucro: float):
-    """Lets the user try a different lucro on screen.
-
-    Only on screen: the exported spreadsheet carries the contractual 5,11% as a
-    formula, so this is for checking a hypothesis, not for changing the export.
-    """
-    return dbc.Row(
-        [
-            dbc.Col(dbc.Label("Lucro (na tela):"), width="auto"),
-            dbc.Col(
-                dbc.Input(
-                    id="lucro",
-                    type="number",
-                    value=lucro,
-                    step=0.0001,
-                    size="sm",
-                    style={**STYLE_INPUT, "width": "120px"},
-                ),
-                width="auto",
-            ),
-        ],
-        className="mb-3",
-        align="center",
-    )
-
-
-def _cabecalho_contrato(contrato: dict):
+def _faixa_contrato(contrato: dict):
     """The export's header block, on screen, so the two can be compared."""
-    linhas = [f"Contrato: {contrato['numero']}"]
+    itens = [("Contrato", contrato["numero"])]
     for campo in CAMPOS_CADASTRO:
-        valor = contrato.get(campo)
-        linhas.append(f"{ROTULOS_CADASTRO[campo]}: {valor if valor else '—'}")
-    linhas.append(f"Processo: {contrato.get('numero_processo') or '—'}")
+        itens.append((ROTULOS_CADASTRO[campo], contrato.get(campo) or "—"))
+    itens.append(("Processo", contrato.get("numero_processo") or "—"))
     data_base = contrato.get("data_base")
-    linhas.append(f"Data base: {data_base.strftime('%m/%Y') if data_base else '—'}")
+    itens.append(("Data Base", data_base.strftime("%m/%Y") if data_base else "—"))
     for familia in FAMILIAS:
         regiao = (contrato.get("regioes") or {}).get(familia)
-        linhas.append(f"Região ANP ({familia}): {regiao or '—'}")
+        itens.append((f"Região ANP ({familia})", regiao or "—"))
 
-    return dbc.Row(
+    return html.Div(
         [
-            dbc.Col(
-                html.Div([html.Div(linha) for linha in linhas]),
-                style={"fontSize": "13px"},
-            ),
-            dbc.Col(html.Div([html.Div(linha) for linha in LEGENDA])),
+            html.Div(
+                [
+                    html.P(rotulo, className="stat-label"),
+                    html.P(str(valor), className="num" if rotulo != "Contratada" else "body-md"),
+                ],
+                className="field",
+            )
+            for rotulo, valor in itens
         ],
-        className="mb-4",
+        className="field-grid panel-body panel",
     )
 
 
-def _cartao_produto(indice: int, produto: str, df):
-    tabela = dash_table.DataTable(
+def _matriz(indice: int, df):
+    """The dense table. Two header rows: the spreadsheet column, then the name."""
+    colunas = []
+    for nome in COLUNAS:
+        letra, papel = COLUNA_PLANILHA[nome]
+        topo = f"COL {letra}" + (f" · {papel}" if papel else "")
+        colunas.append({"name": [topo, nome], "id": nome})
+
+    return dash_table.DataTable(
         id={"tipo": "tabela-produto", "indice": indice},
-        columns=[{"name": c, "id": c} for c in COLUNAS],
+        columns=colunas,
         data=df[COLUNAS].to_dict("records"),
         style_table={"overflowX": "auto"},
         style_header=STYLE_HEADER,
@@ -139,145 +263,222 @@ def _cartao_produto(indice: int, produto: str, df):
         sort_action="native",
         filter_action="native",
     )
-    subtotal = df["REF sem Lucro"].sum()
-
-    return dbc.Card(
-        [
-            dbc.CardHeader(
-                html.H5(produto, className="mb-0", style={"color": "#bec6e0"}),
-                style={"backgroundColor": "#0a1628"},
-            ),
-            dbc.CardBody(tabela, style={"padding": "0"}),
-            dbc.CardFooter(
-                html.Div(
-                    [
-                        html.Span("SUBTOTAL REF sem Lucro: ", style={"color": "#adc6ff"}),
-                        html.Span(
-                            f"{subtotal:,.2f}",
-                            style={"fontFamily": "'JetBrains Mono', monospace"},
-                        ),
-                    ],
-                    style={"textAlign": "right"},
-                ),
-                style={"backgroundColor": "#0a1628"},
-            ),
-        ],
-        className="mb-4",
-        style={"backgroundColor": "#051424", "border": "1px solid rgba(69,70,77,.3)"},
-    )
 
 
-def _cartao_total(total: float):
-    return dbc.Card(
-        dbc.CardBody(
-            html.Div(
-                [
-                    html.Span("TOTAL REEQUILÍBRIO: ", style={"color": "#adc6ff"}),
-                    html.Span(
-                        f"{total:,.2f}",
-                        style={
-                            "fontSize": "18px",
-                            "fontWeight": "600",
-                            "fontFamily": "'JetBrains Mono', monospace",
-                        },
-                    ),
-                ],
-                style={"textAlign": "right"},
-            )
-        ),
-        style={"backgroundColor": "#0a1628", "border": "2px solid #adc6ff"},
-        className="mb-4",
-    )
-
-
-def _barra_de_exportacao(numero: str, liberado: bool):
-    """Download link, disabled while anything is missing.
+def _bloco_de_exportacao(numero: str, liberado: bool, pendencias: list[str], lucro: float):
+    """The export, with the reason it is blocked and the screens that unblock it.
 
     A plain link rather than a button with a callback: the file is served by
     ``/reequilibrio/planilha``, so the browser downloads it directly instead of
     the bytes travelling through a Dash callback.
     """
-    if not liberado:
-        return dbc.Alert(
-            "A planilha fica disponível quando não houver pendências acima.",
-            color="secondary",
-        )
-    return html.Div(
-        dbc.Button(
-            "Baixar planilha (.xlsx)",
-            href=f"/reequilibrio/planilha?contrato={numero}",
-            external_link=True,
-            target="_blank",
-            color="primary",
-        ),
-        className="mb-4",
+    campo = html.Div(
+        [
+            html.Div(
+                [
+                    html.Span("Lucro (somente na tela)", className="field-label"),
+                    html.Span("a planilha mantém 5,11%", className="field-hint"),
+                ],
+                className="field-head",
+            ),
+            dbc.Input(id="lucro", type="number", value=lucro, step=0.0001,
+                      style={**STYLE_INPUT, "width": "140px"}),
+        ],
+        className="field",
     )
+
+    if not liberado:
+        motivos = pendencias or [
+            "Nenhum item de medição confirmado entrou no cálculo deste contrato."
+        ]
+        return html.Div(
+            [
+                _aviso(
+                    "Cálculo incompleto — exportação bloqueada",
+                    html.Ul([html.Li(m) for m in motivos]),
+                    acoes=[
+                        html.A(
+                            [icone("rule"), "Resolver Códigos Pendentes"],
+                            href="/dashboard/?aba=pendencias",
+                            className="btn",
+                        ),
+                        html.A(
+                            [icone("fact_check"), "Definir Região ANP"],
+                            href="/dashboard/?aba=cadastro",
+                            className="btn",
+                        ),
+                        html.A(
+                            [icone("monitoring"), "Conferir Índices"],
+                            href="/dashboard/?aba=indices",
+                            className="btn",
+                        ),
+                        html.Span([icone("lock"), "Baixar Planilha Excel"],
+                                  className="btn disabled"),
+                    ],
+                ),
+                html.Div(campo, className="batch-actions mt-md"),
+            ]
+        )
+
+    return html.Div(
+        [
+            _aviso(
+                "Cálculo completo",
+                "Nenhuma pendência. As colunas F, H, I e J saem como fórmulas; só o "
+                "ΔP é gravado como valor.",
+                tipo="ok",
+                icone_nome="check_circle",
+            ),
+            html.Div(
+                [
+                    campo,
+                    html.A(
+                        [icone("download"), "Baixar Planilha Excel com Fórmulas"],
+                        href=f"/reequilibrio/planilha?contrato={numero}",
+                        target="_blank",
+                        className="btn btn-primary",
+                    ),
+                ],
+                className="batch-actions mt-md",
+            ),
+        ]
+    )
+
+
+# ------------------------------------------------------------------- Cadastro
 
 
 def tela_cadastro(contrato: dict | None):
     """The fields no PDF carries, plus the ANP region of each family."""
     if contrato is None:
-        return _alerta(["Selecione um contrato para cadastrar os dados."])
+        return _aviso("Nenhum contrato selecionado",
+                      "Escolha um contrato acima para cadastrar os dados.",
+                      tipo="info", icone_nome="info")
+
+    vazios = [ROTULOS_CADASTRO[c] for c in CAMPOS_CADASTRO if not contrato.get(c)]
 
     campos = [
-        dbc.Row(
+        html.Div(
             [
-                dbc.Col(dbc.Label(ROTULOS_CADASTRO[campo]), width=3),
-                dbc.Col(
-                    dbc.Input(
-                        id={"tipo": "campo-cadastro", "campo": campo},
-                        value=contrato.get(campo) if contrato.get(campo) is not None else "",
-                        style=STYLE_INPUT,
-                    )
+                html.Div(
+                    [
+                        html.Span(ROTULOS_CADASTRO[campo], className="field-label"),
+                        html.Span(
+                            [icone("priority_high"), DICAS_CADASTRO[campo]],
+                            className="field-hint",
+                        ) if campo == "segmento" else
+                        html.Span(DICAS_CADASTRO[campo], className="field-hint"),
+                    ],
+                    className="field-head",
+                ),
+                dbc.Input(
+                    id={"tipo": "campo-cadastro", "campo": campo},
+                    value=contrato.get(campo) if contrato.get(campo) is not None else "",
+                    style=STYLE_INPUT,
                 ),
             ],
-            className="mb-2",
+            className="field",
         )
         for campo in CAMPOS_CADASTRO
     ]
 
-    regioes = [
-        dbc.Row(
+    # Read-only on purpose: both come from the PDF, and the Data Base is what
+    # anchors the ΔP — a typo here would move every calculation.
+    imutaveis = [
+        html.Div(
             [
-                dbc.Col(dbc.Label(f"Região ANP — {familia}"), width=3),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id={"tipo": "regiao-familia", "familia": familia},
-                        options=[{"label": r, "value": r} for r in REGIOES],
-                        value=(contrato.get("regioes") or {}).get(familia),
-                        placeholder="Escolha a região",
-                    )
+                html.Div(
+                    [
+                        html.Span(rotulo, className="field-label"),
+                        html.Span([icone("lock"), "Imutável"], className="field-hint"),
+                    ],
+                    className="field-head",
                 ),
+                dbc.Input(value=str(valor or "—"), disabled=True, style=STYLE_INPUT),
             ],
-            className="mb-2",
+            className="field",
         )
-        for familia in FAMILIAS
+        for rotulo, valor in (
+            ("Data Base (do PDF)", contrato.get("data_base")),
+            ("Processo (do PDF)", contrato.get("numero_processo")),
+        )
     ]
 
     return html.Div(
         [
-            html.H5(f"Contrato {contrato['numero']}", className="mb-3"),
-            # Read-only on purpose: both come from the PDF, and the Data Base is
-            # what anchors the ΔP — a typo here would move every calculation.
-            dbc.Alert(
-                [
-                    html.Div(f"Data base (do PDF): {contrato.get('data_base') or '—'}"),
-                    html.Div(f"Processo (do PDF): {contrato.get('numero_processo') or '—'}"),
+            _aviso(
+                f"{len(vazios)} campo(s) do cadastro em branco",
+                "A planilha é gerada, mas estes campos saem vazios no cabeçalho do "
+                "documento: " + ", ".join(vazios) + ".",
+                acoes=None,
+            ) if vazios else _aviso("Cadastro completo",
+                                    "Todos os campos do cabeçalho estão preenchidos.",
+                                    tipo="ok", icone_nome="check_circle"),
+            _painel(
+                "Dados oficiais do contrato",
+                "fact_check",
+                html.Div(campos + imutaveis, className="field-grid"),
+                subtitulo=f"Contrato {contrato['numero']}",
+                acoes=[
+                    dbc.Button([icone("save"), "Salvar Alterações do Contrato"],
+                               id="salvar-cadastro", className="btn btn-primary")
                 ],
-                color="dark",
+                rodape=html.Div(id="aviso-cadastro"),
             ),
-            *campos,
-            html.Hr(),
-            html.P(
-                "As regiões são independentes: o CAP pode ser cotado numa região "
-                "e as emulsões noutra.",
-                style={"fontSize": "13px", "color": "#adc6ff"},
+            _painel(
+                "Associação de famílias betuminosas à região ANP",
+                "public",
+                html.Div(
+                    [
+                        html.P(
+                            "As regiões são independentes: o CAP pode ser cotado numa "
+                            "região e as emulsões noutra. Sem região definida, o ΔP "
+                            "daquela família não é calculado e a exportação fica "
+                            "bloqueada.",
+                            className="body-md muted",
+                        ),
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                html.Span(f"Família {familia}",
+                                                          className="field-label"),
+                                                html.Span(
+                                                    [icone("check_circle"), "Região definida"],
+                                                    className="badge badge-ok",
+                                                )
+                                                if (contrato.get("regioes") or {}).get(familia)
+                                                else html.Span(
+                                                    [icone("warning"), "Não definida — bloqueia o cálculo"],
+                                                    className="badge badge-warn",
+                                                ),
+                                            ],
+                                            className="field-head",
+                                        ),
+                                        dcc.Dropdown(
+                                            id={"tipo": "regiao-familia", "familia": familia},
+                                            options=[{"label": r, "value": r} for r in REGIOES],
+                                            value=(contrato.get("regioes") or {}).get(familia),
+                                            placeholder="Escolha a região",
+                                            className="dash-dropdown",
+                                        ),
+                                    ],
+                                    className="field",
+                                )
+                                for familia in FAMILIAS
+                            ],
+                            className="field-grid mt-md",
+                        ),
+                    ]
+                ),
             ),
-            *regioes,
-            dbc.Button("Salvar cadastro", id="salvar-cadastro", color="primary"),
-            html.Div(id="aviso-cadastro", className="mt-3"),
         ]
     )
+
+
+# ----------------------------------------------------------------- Pendências
 
 
 def tela_pendencias(pendencias: list[dict], produtos: list[dict]):
@@ -293,56 +494,97 @@ def tela_pendencias(pendencias: list[dict], produtos: list[dict]):
     code at an existing product instead merges it there.
     """
     if not pendencias:
-        return dbc.Alert("Nenhum código pendente de confirmação.", color="success")
+        return _aviso(
+            "Nenhum código pendente",
+            "Todos os códigos de serviço vistos nos PDFs estão homologados e "
+            "entram no cálculo.",
+            tipo="ok",
+            icone_nome="check_circle",
+        )
 
     opcoes = [
         {"label": f"{p['descricao_export']} ({p['familia']})", "value": p["id"]}
         for p in produtos
     ]
 
-    itens = [
-        dbc.ListGroupItem(
-            dbc.Row(
-                [
-                    dbc.Col(html.Strong(p["codigo_servico"]), width=2),
-                    dbc.Col(html.Span(p.get("descricao_pdf") or "—")),
-                    dbc.Col(
-                        dcc.Dropdown(
-                            id={"tipo": "produto-pendencia", "codigo": p["codigo_servico"]},
-                            options=opcoes,
-                            value=p.get("produto_id"),
-                            placeholder="Produto de exportação",
-                        ),
-                        width=3,
+    linhas = [
+        html.Tr(
+            [
+                html.Td(html.Span(p["codigo_servico"], className="num-strong"), className="left"),
+                html.Td(
+                    [
+                        html.Span(p.get("descricao_pdf") or "—", className="cell-title"),
+                        html.Span(f"família sugerida: {p.get('familia') or '—'}",
+                                  className="cell-note"),
+                    ],
+                    className="left",
+                ),
+                html.Td(
+                    dcc.Dropdown(
+                        id={"tipo": "produto-pendencia", "codigo": p["codigo_servico"]},
+                        options=opcoes,
+                        value=p.get("produto_id"),
+                        placeholder="Produto de exportação",
+                        className="dash-dropdown",
+                        style={"minWidth": "320px"},
                     ),
-                    dbc.Col(
-                        dbc.Button(
-                            "Confirmar",
-                            id={"tipo": "confirmar-codigo", "codigo": p["codigo_servico"]},
-                            size="sm",
-                            color="success",
-                        ),
-                        width=2,
+                    className="left",
+                ),
+                html.Td(
+                    dbc.Button(
+                        [icone("check"), "Confirmar Associação"],
+                        id={"tipo": "confirmar-codigo", "codigo": p["codigo_servico"]},
+                        className="btn btn-ok btn-sm",
                     ),
-                ],
-                align="center",
-            ),
-            style={"backgroundColor": "#051424"},
+                    className="left",
+                ),
+            ]
         )
         for p in pendencias
     ]
+
+    tabela = html.Div(
+        html.Table(
+            [
+                html.Thead(
+                    html.Tr(
+                        [
+                            html.Th("Código no PDF", className="left"),
+                            html.Th("Descrição no resumo", className="left"),
+                            html.Th("Produto ANP destino", className="left"),
+                            html.Th("Ação", className="left"),
+                        ]
+                    )
+                ),
+                html.Tbody(linhas),
+            ],
+            className="data-table",
+        ),
+        className="table-scroll",
+    )
+
     return html.Div(
         [
-            html.P(
-                "Códigos não confirmados ficam fora do cálculo. Confira o produto "
-                "sugerido antes de confirmar — vários códigos podem apontar para o "
-                "mesmo produto.",
-                style={"fontSize": "13px", "color": "#adc6ff"},
+            _aviso(
+                f"{len(pendencias)} código(s) de serviço pendente(s) de homologação",
+                "Um código não confirmado fica fora do cálculo: nada é classificado "
+                "errado em silêncio, mas o valor correspondente também não entra no "
+                "REF até a confirmação.",
             ),
-            dbc.ListGroup(itens),
-            html.Div(id="aviso-pendencias", className="mt-3"),
+            _painel(
+                "Fila de homologação ativa",
+                "rule",
+                tabela,
+                subtitulo="Confira o produto sugerido antes de confirmar — vários "
+                          "códigos podem apontar para o mesmo produto.",
+                rodape=html.Div(id="aviso-pendencias"),
+                flush=True,
+            ),
         ]
     )
+
+
+# -------------------------------------------------------- Templates e backup
 
 
 def tela_administracao(templates: list[dict], backups: list[dict]):
@@ -353,180 +595,185 @@ def tela_administracao(templates: list[dict], backups: list[dict]):
     """
     return html.Div(
         [
-            html.H5("Template da planilha", className="mb-2"),
-            html.P(
-                "O template define o layout, o logotipo e a memória de cálculo. "
-                "Edite-o no Excel e envie de volta.",
-                style={"fontSize": "13px", "color": "#adc6ff"},
+            _painel(
+                "Template da planilha",
+                "description",
+                html.Div(
+                    [
+                        html.P(
+                            "O template define o layout, o logotipo e a memória de "
+                            "cálculo. Edite-o no Excel e envie de volta — um arquivo "
+                            "sem a equação ou com o cabeçalho deslocado é recusado.",
+                            className="body-md muted",
+                        ),
+                        html.Div(id="aviso-template", className="mt-sm"),
+                        _lista_templates(templates),
+                    ]
+                ),
+                acoes=[
+                    dcc.Upload(
+                        id="enviar-template",
+                        children=html.Span(
+                            [icone("upload"), "Enviar template (.xlsx)"],
+                            className="btn btn-primary",
+                        ),
+                        multiple=False,
+                    )
+                ],
             ),
-            dcc.Upload(
-                id="enviar-template",
-                children=dbc.Button("Enviar template (.xlsx)", color="primary"),
-                multiple=False,
-                className="mb-2",
+            _painel(
+                "Backups do banco",
+                "settings_backup_restore",
+                html.Div(
+                    [
+                        html.P(
+                            "Um único arquivo cobre tudo o que é do usuário: índices, "
+                            "contratos, itens de medição e os templates.",
+                            className="body-md muted",
+                        ),
+                        html.Div(id="aviso-backup", className="mt-sm"),
+                        _lista_backups(backups),
+                    ]
+                ),
+                acoes=[
+                    dbc.Button([icone("play_arrow"), "Gerar backup agora"],
+                               id="gerar-backup", className="btn btn-primary"),
+                    dcc.Upload(
+                        id="enviar-backup",
+                        children=html.Span([icone("upload"), "Enviar backup (.dump)"],
+                                           className="btn"),
+                        multiple=False,
+                    ),
+                ],
             ),
-            html.Div(id="aviso-template"),
-            _lista_templates(templates),
-            html.Hr(className="my-4"),
-            html.H5("Backups do banco", className="mb-2"),
-            html.P(
-                "O backup cobre tudo: índices, contratos, medições e os templates.",
-                style={"fontSize": "13px", "color": "#adc6ff"},
-            ),
-            dbc.Button("Gerar backup agora", id="gerar-backup", color="primary"),
-            dcc.Upload(
-                id="enviar-backup",
-                children=dbc.Button("Enviar backup (.dump)", color="secondary"),
-                multiple=False,
-                className="ms-2 d-inline-block",
-            ),
-            html.Div(id="aviso-backup", className="mt-2"),
-            _lista_backups(backups),
         ]
+    )
+
+
+def _tabela(cabecalhos: list[str], linhas: list):
+    return html.Div(
+        html.Table(
+            [
+                html.Thead(html.Tr([html.Th(c, className="left") for c in cabecalhos])),
+                html.Tbody(linhas),
+            ],
+            className="data-table",
+        ),
+        className="table-scroll mt-md",
     )
 
 
 def _lista_templates(templates: list[dict]):
     if not templates:
-        return dbc.Alert("Nenhum template cadastrado.", color="warning")
-    return dbc.ListGroup(
-        [
-            dbc.ListGroupItem(
-                dbc.Row(
+        return _aviso("Nenhum template cadastrado",
+                      "Sem template não há exportação. Envie um arquivo .xlsx.")
+    linhas = [
+        html.Tr(
+            [
+                html.Td(
                     [
-                        dbc.Col(
-                            [
-                                html.Strong(t["nome"]),
-                                dbc.Badge(
-                                    "ativo", color="success", className="ms-2"
-                                ) if t["ativo"] else None,
-                                html.Div(
-                                    t["criado_em"].strftime("%d/%m/%Y %H:%M"),
-                                    style={"fontSize": "12px", "color": "#adc6ff"},
-                                ),
-                            ]
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Baixar",
-                                href=f"/admin/templates/{t['id']}/download",
-                                external_link=True,
-                                size="sm",
-                                color="secondary",
-                            ),
-                            width="auto",
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Ativar",
-                                id={"tipo": "ativar-template", "id": t["id"]},
-                                size="sm",
-                                color="primary",
-                                disabled=t["ativo"],
-                            ),
-                            width="auto",
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Excluir",
-                                id={"tipo": "excluir-template", "id": t["id"]},
-                                size="sm",
-                                color="danger",
-                                # The active template cannot be deleted; showing
-                                # it disabled explains why without a failed click.
-                                disabled=t["ativo"],
-                            ),
-                            width="auto",
-                        ),
+                        html.Span(t["nome"], className="file-row-name"),
+                        html.Span(t["criado_em"].strftime("%d/%m/%Y %H:%M"),
+                                  className="file-row-note"),
                     ],
-                    align="center",
+                    className="left",
                 ),
-                style={"backgroundColor": "#051424"},
-            )
-            for t in templates
-        ]
-    )
+                html.Td(
+                    html.Span([icone("check_circle"), "Ativo"], className="badge badge-ok")
+                    if t["ativo"] else html.Span("Histórico", className="badge"),
+                    className="left",
+                ),
+                html.Td(
+                    [
+                        html.A([icone("download"), "Baixar"],
+                               href=f"/admin/templates/{t['id']}/download",
+                               className="btn btn-sm"),
+                        dbc.Button([icone("task_alt"), "Ativar"],
+                                   id={"tipo": "ativar-template", "id": t["id"]},
+                                   className="btn btn-sm", disabled=t["ativo"]),
+                        # The active template cannot be deleted; showing it
+                        # disabled explains why without a failed click.
+                        dbc.Button([icone("delete"), "Excluir"],
+                                   id={"tipo": "excluir-template", "id": t["id"]},
+                                   className="btn btn-sm btn-danger", disabled=t["ativo"]),
+                    ],
+                    className="left",
+                ),
+            ]
+        )
+        for t in templates
+    ]
+    return _tabela(["Arquivo", "Situação", "Ações"], linhas)
 
 
 def _lista_backups(backups: list[dict]):
     if not backups:
-        return dbc.Alert("Nenhum backup gerado ainda.", color="warning")
-    return dbc.ListGroup(
-        [
-            dbc.ListGroupItem(
-                dbc.Row(
+        return _aviso("Nenhum backup gerado ainda",
+                      "Gere o primeiro dump para ter de onde voltar.")
+    linhas = [
+        html.Tr(
+            [
+                html.Td(
                     [
-                        dbc.Col(
-                            [
-                                html.Strong(b["nome"]),
-                                html.Div(
-                                    f"{b['criado_em'].strftime('%d/%m/%Y %H:%M')} — "
-                                    f"{b['tamanho'] / 1024:,.0f} kB",
-                                    style={"fontSize": "12px", "color": "#adc6ff"},
-                                ),
-                            ]
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Baixar",
-                                href=f"/admin/backups/{b['nome']}/download",
-                                external_link=True,
-                                size="sm",
-                                color="secondary",
-                            ),
-                            width="auto",
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Restaurar",
-                                id={"tipo": "restaurar-backup", "nome": b["nome"]},
-                                size="sm",
-                                color="warning",
-                            ),
-                            width="auto",
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Excluir",
-                                id={"tipo": "excluir-backup", "nome": b["nome"]},
-                                size="sm",
-                                color="danger",
-                            ),
-                            width="auto",
-                        ),
+                        html.Span(b["nome"], className="file-row-name"),
+                        html.Span(b["criado_em"].strftime("%d/%m/%Y %H:%M"),
+                                  className="file-row-note"),
                     ],
-                    align="center",
+                    className="left",
                 ),
-                style={"backgroundColor": "#051424"},
-            )
-            for b in backups
-        ]
-        + [_confirmacao_de_restauracao()]
-    )
+                html.Td(f"{b['tamanho'] / 1024:,.0f} kB".replace(",", "."), className="left"),
+                html.Td(
+                    [
+                        html.A([icone("download"), "Baixar"],
+                               href=f"/admin/backups/{b['nome']}/download",
+                               className="btn btn-sm"),
+                        dbc.Button([icone("restore"), "Restaurar"],
+                                   id={"tipo": "restaurar-backup", "nome": b["nome"]},
+                                   className="btn btn-sm btn-danger"),
+                        dbc.Button([icone("delete"), "Excluir"],
+                                   id={"tipo": "excluir-backup", "nome": b["nome"]},
+                                   className="btn btn-sm btn-danger"),
+                    ],
+                    className="left",
+                ),
+            ]
+        )
+        for b in backups
+    ]
+    return html.Div([_tabela(["Arquivo", "Tamanho", "Ações"], linhas),
+                     _confirmacao_de_restauracao()])
 
 
 def _confirmacao_de_restauracao():
     """Restoring replaces the whole database, so it asks for the name typed out.
 
     The service checks the confirmation again, so this field is the explanation,
-    not the protection.
+    not the protection. Visually it is a destructive block, distinct from the
+    ordinary actions above it.
     """
-    return dbc.ListGroupItem(
+    return html.Div(
         [
+            html.Div(icone("warning"), className="notice-icon"),
             html.Div(
-                "Restaurar substitui todo o conteúdo do banco. Digite o nome do "
-                "backup para confirmar; um backup do estado atual é gerado antes.",
-                style={"fontSize": "13px", "color": "#ffb4a2"},
-            ),
-            dbc.Input(
-                id="confirmacao-restauracao",
-                placeholder="nome do backup",
-                style=STYLE_INPUT,
-                className="mt-2",
+                [
+                    html.P("Restauração — ação destrutiva", className="notice-title"),
+                    html.P(
+                        "Restaurar substitui todo o conteúdo do banco. Digite o nome "
+                        "do backup para confirmar; um dump do estado atual é gerado "
+                        "antes de qualquer escrita.",
+                        className="notice-text",
+                    ),
+                    dbc.Input(id="confirmacao-restauracao",
+                              placeholder="nome do backup",
+                              style=STYLE_INPUT, className="mt-sm"),
+                ]
             ),
         ],
-        style={"backgroundColor": "#0a1628"},
+        className="notice danger mt-md",
     )
+
+
+# -------------------------------------------------------------------- Índices
 
 
 def tela_indices(cobertura: dict):
@@ -538,48 +785,55 @@ def tela_indices(cobertura: dict):
     """
     anp = cobertura.get("anp") or {}
     igp = cobertura.get("igp_di") or {}
+    regioes_cobertas = set(cobertura.get("regioes") or [])
+
     return html.Div(
         [
-            html.H5("Índices", className="mb-3"),
-            dbc.Row(
+            html.Div(
                 [
-                    dbc.Col(
-                        dbc.Card(
-                            dbc.CardBody(
-                                [
-                                    html.H6("ANP — preços semanais"),
-                                    html.Div(f"Registros: {anp.get('registros', 0)}"),
-                                    html.Div(f"De: {anp.get('de') or '—'}"),
-                                    html.Div(f"Até: {anp.get('ate') or '—'}"),
-                                    html.Div(
-                                        "Regiões: "
-                                        + (", ".join(cobertura.get("regioes") or []) or "—")
-                                    ),
-                                ]
-                            ),
-                            style={"backgroundColor": "#051424"},
-                        )
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            dbc.CardBody(
-                                [
-                                    html.H6("Índices mensais (IGP-DI)"),
-                                    html.Div(f"Registros: {igp.get('registros', 0)}"),
-                                    html.Div(f"De: {igp.get('de') or '—'}"),
-                                    html.Div(f"Até: {igp.get('ate') or '—'}"),
-                                ]
-                            ),
-                            style={"backgroundColor": "#051424"},
-                        )
-                    ),
-                ]
+                    _cartao_kpi("ANP — preços semanais", str(anp.get("registros", 0)),
+                                f"{anp.get('de') or '—'} até {anp.get('ate') or '—'}",
+                                "local_gas_station"),
+                    _cartao_kpi("Regiões cotadas", str(len(regioes_cobertas)),
+                                ", ".join(sorted(regioes_cobertas)) or "—", "public"),
+                    _cartao_kpi("IGP-DI — índices mensais", str(igp.get("registros", 0)),
+                                f"{igp.get('de') or '—'} até {igp.get('ate') or '—'}",
+                                "monitoring"),
+                ],
+                className="card-grid",
             ),
-            html.Hr(className="my-4"),
-            _formulario_anp(),
-            html.Hr(className="my-4"),
-            _formulario_mensal(),
+            html.Div(
+                [
+                    html.Span(
+                        [icone("check_circle" if regiao in regioes_cobertas else "warning"),
+                         regiao],
+                        className="badge badge-ok" if regiao in regioes_cobertas else "badge badge-warn",
+                    )
+                    for regiao in REGIOES
+                ],
+                className="batch-actions-group mt-md",
+            ),
+            _painel(
+                "Acrescentar preço semanal da ANP",
+                "add_chart",
+                _formulario_anp(),
+                subtitulo="O preço do mês é o da vigência que contém o dia 15.",
+                rodape=html.Div(id="aviso-anp"),
+            ),
+            _painel(
+                "Acrescentar índice mensal",
+                "timeline",
+                _formulario_mensal(),
+                subtitulo="O IGP-DI entra no ΔP das emulsões, com peso de 25%.",
+                rodape=html.Div(id="aviso-mensal"),
+            ),
         ]
+    )
+
+
+def _campo(rotulo: str, controle):
+    return html.Div(
+        [html.Span(rotulo, className="field-label"), controle], className="field"
     )
 
 
@@ -591,85 +845,43 @@ def _formulario_anp():
     """
     return html.Div(
         [
-            html.H6("Acrescentar preço semanal da ANP"),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dcc.DatePickerSingle(
-                            id="anp-inicio", display_format="DD/MM/YYYY",
-                            placeholder="Início da vigência",
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dcc.DatePickerSingle(
-                            id="anp-fim", display_format="DD/MM/YYYY",
-                            placeholder="Fim da vigência",
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dcc.Dropdown(
-                            id="anp-regiao",
-                            options=[{"label": r, "value": r} for r in REGIOES],
-                            placeholder="Região",
-                            style={"width": "180px"},
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dbc.Input(
-                            id="anp-preco", type="number", step=0.0001,
-                            placeholder="R$/kg", style={**STYLE_INPUT, "width": "140px"},
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dbc.Button("Gravar", id="gravar-anp", color="primary", size="sm"),
-                        width="auto",
-                    ),
-                ],
-                align="center",
-            ),
-            html.Div(id="aviso-anp", className="mt-2"),
-        ]
+            _campo("Início da vigência",
+                   dcc.DatePickerSingle(id="anp-inicio", display_format="DD/MM/YYYY",
+                                        placeholder="Início")),
+            _campo("Fim da vigência",
+                   dcc.DatePickerSingle(id="anp-fim", display_format="DD/MM/YYYY",
+                                        placeholder="Fim")),
+            _campo("Região",
+                   dcc.Dropdown(id="anp-regiao",
+                                options=[{"label": r, "value": r} for r in REGIOES],
+                                placeholder="Região", className="dash-dropdown",
+                                style={"minWidth": "180px"})),
+            _campo("Preço (R$/kg)",
+                   dbc.Input(id="anp-preco", type="number", step=0.0001,
+                             placeholder="0,0000",
+                             style={**STYLE_INPUT, "width": "140px"})),
+            dbc.Button([icone("save"), "Gravar"], id="gravar-anp",
+                       className="btn btn-primary"),
+        ],
+        className="inline-form",
     )
 
 
 def _formulario_mensal():
     return html.Div(
         [
-            html.H6("Acrescentar índice mensal"),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dbc.Input(
-                            id="mensal-indice", value="IGP - DI",
-                            style={**STYLE_INPUT, "width": "180px"},
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dcc.DatePickerSingle(
-                            id="mensal-mes", display_format="MM/YYYY",
-                            placeholder="Mês de referência",
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dbc.Input(
-                            id="mensal-valor", type="number", step=0.0001,
-                            placeholder="Valor", style={**STYLE_INPUT, "width": "140px"},
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dbc.Button("Gravar", id="gravar-mensal", color="primary", size="sm"),
-                        width="auto",
-                    ),
-                ],
-                align="center",
-            ),
-            html.Div(id="aviso-mensal", className="mt-2"),
-        ]
+            _campo("Índice",
+                   dbc.Input(id="mensal-indice", value="IGP - DI",
+                             style={**STYLE_INPUT, "width": "180px"})),
+            _campo("Mês de referência",
+                   dcc.DatePickerSingle(id="mensal-mes", display_format="MM/YYYY",
+                                        placeholder="Mês")),
+            _campo("Valor",
+                   dbc.Input(id="mensal-valor", type="number", step=0.0001,
+                             placeholder="0,0000",
+                             style={**STYLE_INPUT, "width": "140px"})),
+            dbc.Button([icone("save"), "Gravar"], id="gravar-mensal",
+                       className="btn btn-primary"),
+        ],
+        className="inline-form",
     )

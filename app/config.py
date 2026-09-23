@@ -1,12 +1,22 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).parent.parent
+
+# Does not override variables already in the environment (e.g. the ones
+# docker-compose.yml sets directly on the container), so this is safe in both
+# the local run and the containerized one.
+load_dotenv(PROJECT_ROOT / ".env")
 
 STORAGE_PATH = Path(os.getenv("STORAGE_PATH", str(PROJECT_ROOT / "data")))
 
+# Matches the local (non-Docker) run documented in the README: postgres on the
+# host's port 5433. The full docker-compose stack does not use this default —
+# it sets DATABASE_URL directly on the container's environment.
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://dnit:dnit@localhost:5432/dnit"
+    "DATABASE_URL", "postgresql://dnit:dnit@localhost:5433/dnit"
 )
 
 MIGRATIONS_PATH = PROJECT_ROOT / "migrations"

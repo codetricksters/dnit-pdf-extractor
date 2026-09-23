@@ -1,0 +1,82 @@
+{#
+  Barra lateral da casca comum. `resumo` é o app.services.progresso.Resumo; quando
+  ausente, a barra ainda renderiza (a navegação não depende do banco).
+  `visao` marca o item ativo nas visões da página de upload.
+#}
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <img class="brand-mark" src="{{ url_for('static', path='images/logo.svg') }}" alt="" />
+    <div>
+      <p class="brand-title">DNIT</p>
+      <p class="brand-sub">Extrator &amp; Reequilíbrio</p>
+    </div>
+  </div>
+
+  <div class="sidebar-contract">
+    <div class="sidebar-contract-head">
+      <span class="label-md label-caps muted">Contrato ativo</span>
+      {% if resumo and resumo.pendencias %}
+      <span class="badge badge-warn">
+        <span class="material-symbols-outlined">warning</span>
+        {{ resumo.pendencias }} pendência{{ 's' if resumo.pendencias != 1 else '' }}
+      </span>
+      {% endif %}
+    </div>
+    <div class="sidebar-contract-card">
+      <span class="material-symbols-outlined">description</span>
+      <div>
+        <p class="sidebar-contract-number">{{ resumo.rotulo_contrato if resumo else '—' }}</p>
+        <p class="body-sm muted">{{ resumo.descricao_contrato if resumo else '' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-group">
+      <p class="nav-group-title">Extrator de dados</p>
+      <a href="/" class="nav-item {{ 'active' if visao == 'upload' }}" data-view="upload">
+        <span class="material-symbols-outlined">upload_file</span>
+        <span>Upload &amp; Processamento</span>
+      </a>
+      <a href="/" class="nav-item {{ 'active' if visao == 'queue' }}" data-view="queue">
+        <span class="material-symbols-outlined">pending_actions</span>
+        <span>Fila de Jobs</span>
+      </a>
+      <a href="/" class="nav-item {{ 'active' if visao == 'files' }}" data-view="files">
+        <span class="material-symbols-outlined">inventory_2</span>
+        <span>Arquivos Processados</span>
+      </a>
+    </div>
+    <div class="nav-group">
+      <p class="nav-group-title">Reequilíbrio &amp; auditoria</p>
+      <a href="/dashboard/?aba=reequilibrio" class="nav-item">
+        <span class="material-symbols-outlined">calculate</span>
+        <span>Memória de Cálculo</span>
+      </a>
+      <a href="/dashboard/?aba=cadastro" class="nav-item">
+        <span class="material-symbols-outlined">fact_check</span>
+        <span>Cadastro do Contrato</span>
+      </a>
+      <a href="/dashboard/?aba=pendencias" class="nav-item">
+        <span class="material-symbols-outlined">rule</span>
+        <span>Códigos Pendentes</span>
+        {% if resumo and resumo.pendencias %}
+        <span class="nav-item-badge">{{ resumo.pendencias }}</span>
+        {% endif %}
+      </a>
+      <a href="/dashboard/?aba=indices" class="nav-item">
+        <span class="material-symbols-outlined">monitoring</span>
+        <span>Índices ANP / FGV</span>
+      </a>
+      <a href="/dashboard/?aba=administracao" class="nav-item">
+        <span class="material-symbols-outlined">settings_backup_restore</span>
+        <span>Templates &amp; Backup</span>
+      </a>
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <span>Medições no banco</span>
+    <span class="num">{{ resumo.medicoes if resumo else 0 }}</span>
+  </div>
+</aside>

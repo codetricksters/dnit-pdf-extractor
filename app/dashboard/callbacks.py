@@ -11,13 +11,21 @@ re-render from the database rather than from what was on screen before the click
 
 import base64
 import binascii
+from urllib.parse import parse_qs
 
 from dash import ALL, Input, Output, State, callback_context, html, no_update
 import dash_bootstrap_components as dbc
 
-from ..services import backup, catalogo, contratos_repo, indices_repo, template_repo
+from ..services import (
+    backup,
+    catalogo,
+    contratos_repo,
+    indices_repo,
+    progresso,
+    template_repo,
+)
 from ..services.xlsx_drawings import TemplateInvalido
-from . import views
+from . import layout, views
 from .data_loader import DEFAULT_LUCRO, compute_ref_columns, load_reequilibrio_data
 
 
@@ -61,8 +69,58 @@ def register_callbacks(app):
         return opcoes, escolhido
 
     @app.callback(
+        Output("aba", "data"),
+        Input({"tipo": "nav-aba", "aba": ALL}, "n_clicks"),
+        Input("url", "search"),
+        State("aba", "data"),
+    )
+    def escolher_aba(_cliques, busca, atual):
+        """Which screen is showing: a sidebar click, or ``?aba=…`` on the URL.
+
+        The deep link matters because the upload page and the step trail point
+        straight at the screen that resolves each pendência.
+        """
+        acionado = _disparado()
+        if acionado:
+            return acionado["aba"]
+        pedido = parse_qs((busca or "").lstrip("?")).get("aba", [None])[0]
+        validas = {aba for aba, _ in layout.ABAS}
+        return pedido if pedido in validas else atual
+
+    @app.callback(
+        Output({"tipo": "nav-aba", "aba": ALL}, "className"),
+        Input("aba", "data"),
+        State({"tipo": "nav-aba", "aba": ALL}, "id"),
+    )
+    def marcar_navegacao(aba, ids):
+        return [
+            "nav-item active" if i["aba"] == aba else "nav-item" for i in ids
+        ]
+
+    @app.callback(
+        Output("trilha", "children"),
+        Output("painel-contrato", "children"),
+        Output("rodape-itens", "children"),
+        Input("contrato", "value"),
+        Input("recarregar", "data"),
+    )
+    def desenhar_casca(numero, _recarregar):
+        resumo = progresso.resumo(numero)
+        return layout.trilha(resumo), layout.painel_contrato(resumo), resumo.medicoes
+
+    @app.callback(
+        Output("titulo-pagina", "children"),
+        Output("subtitulo-pagina", "children"),
+        Output("crumb-atual", "children"),
+        Input("aba", "data"),
+    )
+    def desenhar_cabecalho(aba):
+        titulo, subtitulo = layout.TITULOS[aba]
+        return titulo, subtitulo, titulo
+
+    @app.callback(
         Output("conteudo", "children"),
-        Input("aba", "active_tab"),
+        Input("aba", "data"),
         Input("contrato", "value"),
         Input("recarregar", "data"),
     )

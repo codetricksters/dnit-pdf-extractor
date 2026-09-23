@@ -4,11 +4,11 @@ const submitBtn = document.getElementById('submit-btn');
 const status = document.getElementById('status');
 const progressSection = document.getElementById('progress-section');
 const fileProgress = document.getElementById('file-progress');
-const downloadSection = document.getElementById('download-section');
 const downloadAllBtn = document.getElementById('download-all-btn');
 const fileCountEl = document.getElementById('file-count');
 const fileSizeEl = document.getElementById('file-size');
 const selectFilesBtn = document.getElementById('select-files-btn');
+const progressCount = document.getElementById('progress-count');
 
 let selectedFiles = [];
 let currentJobId = null;
@@ -57,7 +57,7 @@ function resetState() {
   jobFinished = false;
   fileProgress.innerHTML = '';
   progressSection.classList.add('hidden');
-  downloadSection.classList.add('hidden');
+  downloadAllBtn.classList.add('hidden');
   document.getElementById('reset-btn').classList.add('hidden');
   status.textContent = '';
   status.className = 'status-message';
@@ -80,8 +80,10 @@ function formatSize(bytes) {
 function renderStats() {
   const count = selectedFiles.length;
   const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
-  fileCountEl.textContent = `SELECIONADOS: ${count} ARQUIVO${count !== 1 ? 'S' : ''}`;
-  fileSizeEl.textContent = `TAMANHO TOTAL: ${formatSize(totalSize)}`;
+  fileCountEl.textContent = count
+    ? `${count} arquivo${count !== 1 ? 's' : ''} selecionado${count !== 1 ? 's' : ''}`
+    : 'Nenhum arquivo selecionado';
+  fileSizeEl.textContent = formatSize(totalSize);
   submitBtn.disabled = count === 0;
   status.textContent = '';
   status.className = 'status-message';
@@ -95,7 +97,7 @@ document.getElementById('upload-form').addEventListener('submit', async e => {
   status.textContent = 'Enviando arquivos…';
   status.className = 'status-message';
   progressSection.classList.add('hidden');
-  downloadSection.classList.add('hidden');
+  downloadAllBtn.classList.add('hidden');
   fileProgress.innerHTML = '';
 
   const fd = new FormData();
@@ -122,15 +124,37 @@ document.getElementById('upload-form').addEventListener('submit', async e => {
   }
 });
 
+// Cada arquivo do lote é uma linha da tabela "Arquivos no Lote Atual": nome,
+// estado da leitura e resultado (baixar, ou o erro com a ação de repetir).
+const ESTADO = {
+  pending: { rotulo: 'Na fila', classe: 'badge-pending', icone: 'schedule' },
+  processing: { rotulo: 'Processando', classe: 'badge-processing', icone: 'sync' },
+  completed: { rotulo: 'Concluído', classe: 'badge-ok', icone: 'check_circle' },
+  failed: { rotulo: 'Falha', classe: 'badge-danger', icone: 'error' },
+};
+
+function fileRow(name) {
+  const tr = document.createElement('tr');
+  tr.className = 'file-row status-pending';
+  tr.dataset.filename = name;
+  tr.innerHTML = `<td class="left"><span class="file-row-name">${escapeHtml(name)}</span></td>`
+    + '<td class="left file-status"></td>'
+    + '<td class="left file-action"></td>';
+  setRowStatus(tr, 'pending');
+  fileProgress.appendChild(tr);
+  return tr;
+}
+
+function setRowStatus(tr, estado) {
+  const e = ESTADO[estado] || ESTADO.pending;
+  tr.className = `file-row status-${estado}`;
+  tr.querySelector('.file-status').innerHTML =
+    `<span class="badge ${e.classe}"><span class="material-symbols-outlined">${e.icone}</span>${e.rotulo}</span>`;
+}
+
 function initFileProgress(filenames) {
   fileProgress.innerHTML = '';
-  filenames.forEach(name => {
-    const li = document.createElement('li');
-    li.className = 'file-item status-pending';
-    li.dataset.filename = name;
-    li.innerHTML = `<span class="file-indicator"></span><span class="file-name">${escapeHtml(name)}</span><span class="file-action"></span>`;
-    fileProgress.appendChild(li);
-  });
+  filenames.forEach(fileRow);
 }
 
 function connectSSE(jobId) {
@@ -173,39 +197,38 @@ function connectSSE(jobId) {
 
 function updateProgress(data) {
   for (const [filename, info] of Object.entries(data.files)) {
-    let li = fileProgress.querySelector(`[data-filename="${CSS.escape(filename)}"]`);
-    if (!li) {
-      li = document.createElement('li');
-      li.className = 'file-item status-pending';
-      li.dataset.filename = filename;
-      li.innerHTML = `<span class="file-indicator"></span><span class="file-name">${escapeHtml(filename)}</span><span class="file-action"></span>`;
-      fileProgress.appendChild(li);
-    }
-
-    li.className = `file-item status-${info.status}`;
-    const action = li.querySelector('.file-action');
+    const tr = fileProgress.querySelector(`[data-filename="${CSS.escape(filename)}"]`)
+      || fileRow(filename);
+    setRowStatus(tr, info.status);
+    const action = tr.querySelector('.file-action');
 
     if (info.status === 'completed') {
-      action.innerHTML = `<a href="/jobs/${currentJobId}/download/${encodeURIComponent(filename)}" class="btn-download-sm">BAIXAR</a>`;
+      action.innerHTML = `<a class="btn btn-sm" href="/jobs/${currentJobId}/download/${encodeURIComponent(filename)}">`
+        + '<span class="material-symbols-outlined">download</span>Baixar JSON</a>';
     } else if (info.status === 'failed') {
-      action.innerHTML = `<span class="error-msg">${escapeHtml(info.error || 'Erro')}</span><button class="btn-retry-sm" onclick="retryFile('${escapeHtml(filename)}')">Retry</button>`;
+      action.innerHTML = `<span class="file-row-note">${escapeHtml(info.error || 'Erro na leitura')}</span>`
+        + `<button class="btn btn-sm mt-sm" onclick="retryFile('${escapeHtml(filename)}')">`
+        + '<span class="material-symbols-outlined">refresh</span>Reprocessar</button>';
     } else {
       action.innerHTML = '';
     }
   }
+  const total = Object.keys(data.files).length;
+  const prontos = Object.values(data.files).filter(f => f.status === 'completed').length;
+  progressCount.textContent = `${prontos} / ${total} concluídos`;
 }
 
 async function retryFile(filename) {
   const res = await fetch(`/jobs/${currentJobId}/retry/${encodeURIComponent(filename)}`, { method: 'POST' });
   if (res.ok) {
-    const li = fileProgress.querySelector(`[data-filename="${CSS.escape(filename)}"]`);
-    if (li) {
-      li.className = 'file-item status-pending';
-      li.querySelector('.file-action').innerHTML = '';
+    const tr = fileProgress.querySelector(`[data-filename="${CSS.escape(filename)}"]`);
+    if (tr) {
+      setRowStatus(tr, 'pending');
+      tr.querySelector('.file-action').innerHTML = '';
     }
     status.textContent = 'Processando…';
     status.className = 'status-message';
-    downloadSection.classList.add('hidden');
+    downloadAllBtn.classList.add('hidden');
     jobFinished = false;
     connectSSE(currentJobId);
   } else {
@@ -219,7 +242,7 @@ function onJobComplete(jobId) {
   status.textContent = 'Processamento concluído!';
   status.className = 'status-message success';
   downloadAllBtn.href = `/jobs/${jobId}/download`;
-  downloadSection.classList.remove('hidden');
+  downloadAllBtn.classList.remove('hidden');
   submitBtn.disabled = false;
   jobFinished = true;
   document.getElementById('reset-btn').classList.remove('hidden');
@@ -359,17 +382,19 @@ function renderJobItem(job, showDownload) {
   if (job.completed_count > 0) badges.push(`<span class="badge badge-completed">${job.completed_count} concluído</span>`);
   if (job.failed_count > 0) badges.push(`<span class="badge badge-failed">${job.failed_count} falha</span>`);
 
-  const actions = showDownload
-    ? `<a href="/jobs/${job.job_id}/download" class="btn-download-sm">BAIXAR ZIP</a>`
-    : badges.join(' ');
+  const baixar = showDownload
+    ? `<a class="btn btn-sm" href="/jobs/${job.job_id}/download">`
+      + '<span class="material-symbols-outlined">folder_zip</span>Baixar .zip</a>'
+    : '';
 
-  return `<li class="job-item">
-    <div class="job-info">
-      <span class="job-id">${job.job_id}</span>
-      <span class="job-meta"><span>${date}</span><span>${job.file_count} arquivo${job.file_count !== 1 ? 's' : ''}</span></span>
-    </div>
-    <div class="job-actions">${showDownload ? badges.join(' ') + ' ' + actions : actions}</div>
-  </li>`;
+  return `<tr>
+    <td class="left">
+      <span class="file-row-name">${job.job_id}</span>
+      <span class="file-row-note">${date}</span>
+    </td>
+    <td class="left">${job.file_count} arquivo${job.file_count !== 1 ? 's' : ''}</td>
+    <td class="left">${badges.join(' ')} ${baixar}</td>
+  </tr>`;
 }
 
 window.addEventListener('DOMContentLoaded', () => {

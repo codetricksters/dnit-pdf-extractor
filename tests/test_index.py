@@ -15,7 +15,11 @@ async def test_index_contains_upload_form(client):
     response = await client.get("/")
     body = response.text
     assert "<form" in body
-    assert 'action' not in body or '/upload' in body
+    # The form is submitted by script.js to /upload; an `action` on the tag
+    # itself would make the browser navigate away and lose the SSE progress.
+    tag = body[body.index("<form"):]
+    tag = tag[: tag.index(">")]
+    assert "action" not in tag
     assert 'type="file"' in body
 
 

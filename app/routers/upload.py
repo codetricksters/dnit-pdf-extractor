@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
 from ..models.job import FileStatus
+from ..services import progresso
 from ..services.file_processor import classify_file, process_ocr_pdf, process_text_pdf
 from ..services.job_manager import (
     create_job,
@@ -23,7 +24,10 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 
 @router.get("/", include_in_schema=False)
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    # A trilha de etapas e os contadores vêm do banco: a casca mostra o que
+    # falta para a planilha sair, e não uma decoração fixa no HTML.
+    resumo = await asyncio.to_thread(progresso.resumo)
+    return templates.TemplateResponse(request, "index.html", {"resumo": resumo, "visao": "upload"})
 
 
 @router.post("/upload", tags=["extraction"])

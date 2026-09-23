@@ -1,0 +1,24 @@
+{#
+  Trilha das seis etapas. Os estados vêm de app.services.progresso, nunca do
+  markup: o que a trilha mostra é o que bloqueia a exportação.
+#}
+<header class="topbar">
+  <div class="steps">
+    {% for etapa in (resumo.etapas if resumo else []) %}
+    {% if not loop.first %}<span class="material-symbols-outlined step-sep">chevron_right</span>{% endif %}
+    <a class="step step-{{ etapa.status }}" href="{{ etapa.destino }}" title="{{ etapa.detalhe }}">
+      <span class="material-symbols-outlined">{{ etapa.icone }}</span>
+      <span>{{ etapa.numero }}. {{ etapa.rotulo }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="topbar-right">
+    <span class="topbar-user">
+      <span class="material-symbols-outlined">verified_user</span>
+      Memória de cálculo auditável
+    </span>
+    <a class="topbar-avatar" href="/docs" title="Documentação da API">
+      <span class="material-symbols-outlined">api</span>
+    </a>
+  </div>
+</header>

@@ -3,16 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}DNIT PDF Extractor{% endblock %}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <title>{% block title %}DNIT — Extrator &amp; Reequilíbrio{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', path='images/logo.svg') }}" />
   <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}" />
   {% block head %}{% endblock %}
 </head>
 <body>
-  {% block content %}{% endblock %}
+  <div class="app-layout">
+    {% include "_sidebar.html" %}
+    {% include "_topbar.html" %}
+    <main class="main-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
   {% block scripts %}
   <script src="{{ url_for('static', path='js/script.js') }}"></script>
   {% endblock %}
