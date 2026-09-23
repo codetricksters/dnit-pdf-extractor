@@ -243,6 +243,9 @@ pyrightconfig.json
 [Ll]ib64
 [Ll]ocal
 [Ss]cripts
+# The rule above targets a virtualenv's Scripts/ directory; the project's own
+# scripts/ (seed, template build) must be versioned.
+!/scripts/
 pyvenv.cfg
 pip-selfcheck.json
 
