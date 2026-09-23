@@ -1,22 +1,12 @@
 """Admin routes: the interface's only access to template and backup files."""
 
-import shutil
 from pathlib import Path
 
 import pytest
 
-from app import config
 from app.services import backup, template_repo
 
 TEMPLATE = Path("app/templates_xlsx/reequilibrio_template.xlsx")
-
-sem_pg_dump = pytest.mark.skipif(
-    not (
-        (config.PG_BIN and shutil.which("pg_dump", path=config.PG_BIN))
-        or shutil.which("pg_dump")
-    ),
-    reason="pg_dump não disponível (ver tests/test_backup.py)",
-)
 
 
 @pytest.fixture
@@ -74,8 +64,7 @@ async def test_template_inexistente_e_404(client):
     assert (await client.post("/admin/templates/999/ativar")).status_code == 404
 
 
-@sem_pg_dump
-async def test_gerar_listar_e_baixar_backup(client):
+async def test_gerar_listar_e_baixar_backup(client, pg_dump_utilizavel):
     r = await client.post("/admin/backups")
     assert r.status_code == 200
     nome = r.json()["nome"]
@@ -88,8 +77,7 @@ async def test_gerar_listar_e_baixar_backup(client):
     assert download.content == backup.caminho_de(nome).read_bytes()
 
 
-@sem_pg_dump
-async def test_restaurar_exige_confirmacao_pela_rota(client):
+async def test_restaurar_exige_confirmacao_pela_rota(client, pg_dump_utilizavel):
     nome = backup.gerar().name
     r = await client.post(
         f"/admin/backups/{nome}/restaurar", data={"confirmacao": "sim"}

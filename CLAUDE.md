@@ -51,3 +51,4 @@ Sample input PDFs go in `tmp/` (not committed to git).
 - [.claude/rules/backend.md](.claude/rules/backend.md) — extraction, persistence, ΔP rules, Excel generation, templates and backup
 - [.claude/rules/frontend.md](.claude/rules/frontend.md) — templates, static assets, UI patterns
 - [.claude/rules/deployment.md](.claude/rules/deployment.md) — dependencies, environment variables, running in production
+- [.claude/rules/documentation.md](.claude/rules/documentation.md) — what the README must cover and when to update it

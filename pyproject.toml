@@ -1,7 +1,7 @@
 [project]
 name = "dnit-pdf-extractor"
 version = "0.1.0"
-description = "Add your description here"
+description = "Extrai as medições do DNIT em PDF e gera a planilha de Reequilíbrio dos Materiais Betuminosos"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

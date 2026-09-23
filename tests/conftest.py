@@ -1,3 +1,4 @@
+import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
@@ -43,6 +44,24 @@ async def setup_storage(tmp_path):
     yield
     await close_db()
     await db.close_pools()
+
+
+@pytest.fixture()
+async def pg_dump_utilizavel(setup_storage):
+    """Skip when this machine cannot produce a restorable dump.
+
+    Being on PATH is not enough: a client of a higher major than the server
+    writes directives the server rejects, so the service refuses to dump at all.
+    That is a property of the machine, not a defect — hence a skip, with the
+    message that tells the developer how to fix it. Needs the pools open, so it
+    depends on ``setup_storage`` rather than deciding at collection time.
+    """
+    from app.services import backup
+
+    try:
+        await asyncio.to_thread(backup.verificar_compatibilidade)
+    except backup.BackupIndisponivel as e:
+        pytest.skip(str(e))
 
 
 @pytest.fixture()

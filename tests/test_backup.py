@@ -1,9 +1,11 @@
 """Database backups: full cycle, retention, validation, safety rules.
 
-The cycle tests need ``pg_dump``/``pg_restore``. They exist in the application
-image (the Dockerfile installs postgresql-client) but not necessarily on a
-developer's machine, so those tests skip when the binaries are absent while the
-rules that need no subprocess are always exercised.
+The cycle tests need a usable ``pg_dump``/``pg_restore``. The application image
+has one (the Dockerfile pins postgresql-client-16), a developer's machine may
+not — or may have one of a higher major than the server, which is present but
+cannot produce a restorable dump. Both cases are skips, decided at run time by
+the ``pg_dump_utilizavel`` fixture; the rules that need no subprocess are always
+exercised.
 """
 
 import shutil
@@ -55,8 +57,7 @@ def _falso_backup(nome: str, idade_horas: float = 0) -> None:
     os.utime(caminho, (quando, quando))
 
 
-@sem_pg_dump
-async def test_ciclo_gerar_e_restaurar_recupera_o_estado():
+async def test_ciclo_gerar_e_restaurar_recupera_o_estado(pg_dump_utilizavel):
     _gravar("15 00716/2022")
     backup.gerar(motivo="teste")
 
@@ -71,8 +72,7 @@ async def test_ciclo_gerar_e_restaurar_recupera_o_estado():
     assert resultado["seguranca"] in [b["nome"] for b in backup.listar()]
 
 
-@sem_pg_dump
-async def test_restauracao_sem_confirmacao_nao_toca_o_banco():
+async def test_restauracao_sem_confirmacao_nao_toca_o_banco(pg_dump_utilizavel):
     _gravar("15 00716/2022")
     backup.gerar()
     _gravar("99 99999/2099")
@@ -85,8 +85,7 @@ async def test_restauracao_sem_confirmacao_nao_toca_o_banco():
     assert len(_contratos()) == 2
 
 
-@sem_pg_dump
-async def test_arquivo_invalido_e_recusado_antes_de_qualquer_escrita():
+async def test_arquivo_invalido_e_recusado_antes_de_qualquer_escrita(pg_dump_utilizavel):
     _gravar("15 00716/2022")
     _falso_backup("20200101-000000-falso.dump")
 
@@ -101,15 +100,13 @@ async def test_arquivo_invalido_e_recusado_antes_de_qualquer_escrita():
     assert [b["nome"] for b in backup.listar()] == ["20200101-000000-falso.dump"]
 
 
-@sem_pg_dump
-async def test_envio_invalido_nao_fica_no_diretorio():
+async def test_envio_invalido_nao_fica_no_diretorio(pg_dump_utilizavel):
     with pytest.raises(backup.BackupIndisponivel):
         backup.receber_envio("qualquer.dump", b"nao sou um dump")
     assert backup.listar() == []
 
 
-@sem_pg_dump
-async def test_envio_valido_e_aceito_e_pode_ser_restaurado():
+async def test_envio_valido_e_aceito_e_pode_ser_restaurado(pg_dump_utilizavel):
     _gravar("15 00716/2022")
     original = backup.gerar()
     conteudo = original.read_bytes()
