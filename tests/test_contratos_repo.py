@@ -100,6 +100,35 @@ async def test_reprocessar_nao_sobrescreve_o_cadastro_do_usuario():
     assert len(contratos_repo.listar()) == 1
 
 
+async def test_extensao_aceita_o_numero_como_o_usuario_digita():
+    """The form is a text box labelled "Extensão (km)" over a NUMERIC column.
+
+    Typing ``45,7`` used to abort the whole save with ``invalid input syntax for
+    type numeric``, losing the other six fields with it.
+    """
+    contratos_repo.registrar_do_pdf(HEADER)
+    contratos_repo.salvar_cadastro(
+        "06 00134/2022", {"extensao": "45,7", "rodovia": "BR-116/PB"}
+    )
+
+    contrato = contratos_repo.buscar("06 00134/2022")
+    assert contrato["extensao"] == Decimal("45.7")
+    assert contrato["rodovia"] == "BR-116/PB"
+
+
+async def test_extensao_sem_digitos_fica_nula_e_nao_perde_o_resto():
+    contratos_repo.registrar_do_pdf(HEADER)
+    contratos_repo.salvar_cadastro(
+        "06 00134/2022", {"extensao": "a definir", "rodovia": "BR-116/PB"}
+    )
+
+    contrato = contratos_repo.buscar("06 00134/2022")
+    assert contrato["extensao"] is None
+    assert contrato["rodovia"] == "BR-116/PB"
+    # And the export is told, rather than printing a blank as if it were fine.
+    assert "extensao" in contratos_repo.campos_faltantes(contrato)
+
+
 async def test_cadastro_nao_pode_alterar_a_data_base():
     """data_base sets the ΔP denominator, so it stays PDF-owned."""
     contratos_repo.registrar_do_pdf(HEADER)

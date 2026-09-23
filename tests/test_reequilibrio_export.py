@@ -287,6 +287,36 @@ async def test_exportar_sem_regiao_pede_a_regiao(template):
     assert "região" in str(erro.value).lower()
 
 
+async def test_indice_faltante_e_relatado_uma_vez_por_motivo():
+    """One missing value is one thing to fix, not one per measurement.
+
+    The ΔP base month is shared by every line, so an absent base índice used to
+    produce an identical bullet for each of the 52 items.
+    """
+    contrato_id = await _contrato_com_medicoes()
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [
+            {
+                "Serviço": "8300980",
+                "Descrição": "AQUISIÇÃO DE CIMENTO ASFÁLTICO CAP 50/70",
+                "Valor a PI Líquido": 10.0,
+                "Fator": -0.1839,
+                "Período Líquido": f"01/0{m}/2023 - 28/0{m}/2023",
+                "Source_File": f"{m}ª MP.pdf",
+            }
+            for m in range(3, 8)
+        ],
+    )
+    contrato = contratos_repo.buscar("15 00716/2022")
+    itens = medicoes_repo.itens_para_export(contrato_id)
+
+    _, faltando = reequilibrio_export.calcular_deltas(contrato, itens)
+
+    assert len(itens) > len(faltando)
+    assert len(faltando) == len(set(faltando))
+
+
 async def test_exportar_contrato_inexistente(template):
     with pytest.raises(ExportacaoImpossivel):
         reequilibrio_export.exportar("99 99999/9999", template)

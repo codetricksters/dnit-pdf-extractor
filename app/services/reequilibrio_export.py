@@ -252,6 +252,17 @@ def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
     )
 
 
+def _anotar(faltando: list[str], aviso: str) -> None:
+    """Record a missing-índice message once, keeping the order of discovery.
+
+    The base month is the same on every line, so a single missing IGP-DI value
+    would otherwise be reported once per item — 52 identical bullets on screen
+    for one thing to fix.
+    """
+    if aviso not in faltando:
+        faltando.append(aviso)
+
+
 def calcular_deltas(contrato: dict, itens: list[dict]) -> tuple[dict, list[str]]:
     """ΔP for every (família, mês) the spreadsheet needs.
 
@@ -269,9 +280,7 @@ def calcular_deltas(contrato: dict, itens: list[dict]) -> tuple[dict, list[str]]
             continue
         regiao = regioes.get(item["familia"])
         if not regiao:
-            aviso = f"Escolha a região da ANP para a família {item['familia']}."
-            if aviso not in faltando:
-                faltando.append(aviso)
+            _anotar(faltando, f"Escolha a região da ANP para a família {item['familia']}.")
             continue
         try:
             deltas[chave] = delta_p(
@@ -282,7 +291,7 @@ def calcular_deltas(contrato: dict, itens: list[dict]) -> tuple[dict, list[str]]
                 fonte=fonte,
             )
         except IndiceIndisponivel as e:
-            faltando.append(str(e))
+            _anotar(faltando, str(e))
 
     return deltas, faltando
 

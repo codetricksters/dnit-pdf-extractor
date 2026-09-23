@@ -8,9 +8,11 @@ registered by the user and keyed by contract number.
 
 import re
 from datetime import date, datetime
+from decimal import Decimal
 
 from ..db import acquire_sync
 from .delta_p import FAMILIA_CAP, FAMILIA_EMULSOES, inicio_do_mes
+from .number_parser import parse_br_number
 
 # Fields the user owns. PDF-derived fields are deliberately absent: see
 # salvar_cadastro.
@@ -134,6 +136,21 @@ def listar() -> list[dict]:
         return [dict(r) for r in cur.fetchall()]
 
 
+def _extensao(valor) -> float | None:
+    """Coerce the Extensão field to a number.
+
+    The column is NUMERIC but the form is a text box labelled "Extensão (km)",
+    so the natural entry is Brazilian — ``45,7``. Handing that to Postgres raised
+    ``invalid input syntax for type numeric`` and lost the whole form, so the
+    comma is parsed here instead. A value with no digits at all becomes NULL:
+    the export reports the field as missing, which is truthful, rather than
+    refusing to save the other six fields.
+    """
+    if valor is None or isinstance(valor, (int, float, Decimal)):
+        return valor
+    return parse_br_number(str(valor))
+
+
 def salvar_cadastro(numero: str, dados: dict) -> bool:
     """Save the user-owned fields of a contract.
 
@@ -144,6 +161,8 @@ def salvar_cadastro(numero: str, dados: dict) -> bool:
     campos = {k: v for k, v in dados.items() if k in CAMPOS_CADASTRO}
     if not campos:
         return False
+    if "extensao" in campos:
+        campos["extensao"] = _extensao(campos["extensao"])
     atribuicoes = ", ".join(f"{k} = %({k})s" for k in campos)
     campos["numero"] = numero
     with acquire_sync() as conn:
