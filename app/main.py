@@ -18,6 +18,7 @@ from .db import (
 from .routers import admin
 from .routers import upload
 from .routers import jobs
+from .routers import reequilibrio
 from .dashboard import create_dash_app
 from .services import backup, template_repo
 from .services.job_manager import cleanup_stale_jobs, init_db, close_db
@@ -75,5 +76,6 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 app.include_router(upload.router)
 app.include_router(jobs.router)
 app.include_router(admin.router)
+app.include_router(reequilibrio.router)
 
 app.mount("/dashboard", create_dash_app())

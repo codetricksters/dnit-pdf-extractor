@@ -1,15 +1,36 @@
-import json
+"""Data behind the Reequilíbrio screen.
+
+Reads from the database rather than from the extraction JSON, and — the reason
+this module is thin — reuses the export's own grouping and ΔP calculation
+(``reequilibrio_export``). The screen and the spreadsheet the user downloads must
+not be able to disagree: if they did, whichever the user checked first would be
+the one they trusted.
+
+``compute_ref_columns`` stays because it is still what recalculates the table when
+the user tries a different lucro on screen. F is truncated, not rounded
+(``math.trunc``), which is what the PDF and the spreadsheet's ``TRUNC`` do.
+"""
+
 import math
-from pathlib import Path
 
 import pandas as pd
 
-from ..config import STORAGE_PATH
-
-
-JOBS_DIR = STORAGE_PATH / "jobs"
+from ..services import contratos_repo, medicoes_repo
+from ..services.reequilibrio_export import calcular_deltas, montar_grupos
 
 DEFAULT_LUCRO = 0.0511
+
+COLUNAS = [
+    "Período",
+    "Descrição",
+    "Valor a PI",
+    "Fator de Reajuste",
+    "Reajustamento da Medição (R)",
+    "∆P",
+    "Reajustamento Total Base Produtor",
+    "REF Bruto com Lucro",
+    "REF sem Lucro",
+]
 
 
 def _truncate(value: float, decimals: int) -> float:
@@ -17,91 +38,72 @@ def _truncate(value: float, decimals: int) -> float:
     return math.trunc(value * factor) / factor
 
 
-def load_reequilibrio_data() -> dict[str, pd.DataFrame]:
-    """Load all JSON results, filter AQUISIÇÃO items, group by Descrição.
+def listar_contratos() -> list[dict]:
+    return contratos_repo.listar()
 
-    Returns a dict mapping item description to a DataFrame with columns:
-    Período, Descrição, Valor a PI, Fator de Reajuste, Reajustamento da Medição (R),
-    ∆P, Reajustamento Total Base Produtor, REF Bruto com Lucro, REF sem Lucro.
+
+def load_reequilibrio_data(numero_contrato: str) -> tuple[dict[str, pd.DataFrame], list[str]]:
+    """Tables per product for a contract, plus what is missing to compute ΔP.
+
+    The pendências are returned instead of raised: the screen shows the tables it
+    can and tells the user what to fill in, where the export refuses outright —
+    a spreadsheet missing ΔP would look finished and be wrong.
     """
-    records = _load_all_json_records()
+    contrato = contratos_repo.buscar(numero_contrato)
+    if contrato is None:
+        return {}, [f"Contrato '{numero_contrato}' não cadastrado."]
+    if contrato.get("data_base") is None:
+        return {}, ["O contrato está sem Data Base, e sem ela não há ΔP."]
 
-    aquisicao_records = [
-        r for r in records
-        if "AQUI" in (r.get("Descrição") or "").upper()
-    ]
+    itens = medicoes_repo.itens_para_export(contrato["id"])
+    if not itens:
+        return {}, ["Nenhum item confirmado para este contrato."]
 
-    if not aquisicao_records:
-        return {}
+    deltas, faltando = calcular_deltas(contrato, itens)
+    # Only the items whose ΔP could be computed can become rows.
+    utilizaveis = [i for i in itens if (i["familia"], i["mes_medicao"]) in deltas]
+    grupos, _descartadas = montar_grupos(utilizaveis, deltas)
 
-    df = pd.DataFrame(aquisicao_records)
-
-    grouped = {}
-    for desc, group_df in df.groupby("Descrição"):
-        table_df = _build_item_table(group_df)
-        if not table_df.empty:
-            grouped[desc] = table_df
-
-    return grouped
+    return {grupo.descricao: _tabela(grupo) for grupo in grupos}, faltando
 
 
-def _load_all_json_records() -> list[dict]:
-    records = []
-    if not JOBS_DIR.exists():
-        return records
-
-    for json_file in JOBS_DIR.glob("*/results/*.json"):
-        try:
-            with open(json_file) as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                records.extend(data.get("rows", []))
-            elif isinstance(data, list):
-                records.extend(data)
-        except (json.JSONDecodeError, OSError):
-            continue
-
-    return records
-
-
-def _build_item_table(group_df: pd.DataFrame) -> pd.DataFrame:
-    rows = []
-    for _, record in group_df.iterrows():
-        valor_pi = _to_float(record.get("Valor a PI Líquido", 0))
-        fator = _to_float(record.get("Fator", 0))
-        reajustamento_medicao = _truncate(fator * valor_pi, 2)
-
-        rows.append({
-            "Período": record.get("Período Líquido", ""),
-            "Descrição": record.get("Descrição", ""),
-            "Valor a PI": valor_pi,
-            "Fator de Reajuste": fator,
-            "Reajustamento da Medição (R)": reajustamento_medicao,
-            "∆P": 0.0,
-            "Reajustamento Total Base Produtor": 0.0,
-            "REF Bruto com Lucro": 0.0 - reajustamento_medicao,
-            "REF sem Lucro": (0.0 - reajustamento_medicao) * (1 - DEFAULT_LUCRO),
-        })
-
-    return pd.DataFrame(rows)
+def _tabela(grupo) -> pd.DataFrame:
+    linhas = []
+    for item in grupo.linhas:
+        valor_pi = float(item.valor_pi)
+        fator = float(item.fator)
+        delta_p = float(item.delta_p)
+        reajustamento = _truncate(fator * valor_pi, 2)
+        total_produtor = valor_pi * delta_p
+        bruto = total_produtor - reajustamento
+        linhas.append(
+            {
+                "Período": item.mes.strftime("%m/%Y"),
+                "Descrição": grupo.descricao,
+                "Valor a PI": valor_pi,
+                "Fator de Reajuste": fator,
+                "Reajustamento da Medição (R)": reajustamento,
+                "∆P": delta_p,
+                "Reajustamento Total Base Produtor": total_produtor,
+                "REF Bruto com Lucro": bruto,
+                "REF sem Lucro": bruto * (1 - DEFAULT_LUCRO),
+            }
+        )
+    return pd.DataFrame(linhas, columns=COLUNAS)
 
 
-def compute_ref_columns(df: pd.DataFrame, delta_p: float, lucro: float = DEFAULT_LUCRO) -> pd.DataFrame:
-    """Recompute REF columns given a new ∆P value and lucro percentage."""
+def compute_ref_columns(df: pd.DataFrame, lucro: float = DEFAULT_LUCRO) -> pd.DataFrame:
+    """Recompute the REF columns for a different lucro percentage.
+
+    ΔP is no longer an argument: it comes from the índices in the database and is
+    not something the user types any more.
+    """
     df = df.copy()
-    df["∆P"] = delta_p
-    df["Reajustamento Total Base Produtor"] = df["Valor a PI"] * delta_p
+    if df.empty:
+        return df
+    df["Reajustamento Total Base Produtor"] = df["Valor a PI"] * df["∆P"]
     df["REF Bruto com Lucro"] = (
         df["Reajustamento Total Base Produtor"] - df["Reajustamento da Medição (R)"]
     )
     df["REF sem Lucro"] = df["REF Bruto com Lucro"] * (1 - lucro)
     return df
-
-
-def _to_float(value) -> float:
-    if value is None:
-        return 0.0
-    try:
-        return float(value)
-    except (ValueError, TypeError):
-        return 0.0
