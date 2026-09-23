@@ -1,11 +1,41 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=dnit
+      - POSTGRES_PASSWORD=dnit
+      - POSTGRES_DB=dnit
+    ports:
+      # Exposed so the test suite and local runs can reach it from the host.
+      # 5433 on the host because 5432 is commonly taken by another project's DB.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dnit -d dnit"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   dnit-pdf-extractor:
     build: .
     ports:
       - "8000:8000"
     environment:
       - APP_ENV=production
+      - DATABASE_URL=postgresql://dnit:dnit@postgres:5432/dnit
+      - BACKUP_DIR=/app/data/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       # Mount tmp directory for local testing (optional)
       - ./tmp:/app/tmp
+      # Extraction artefacts (job JSON) and database backups must outlive the container.
+      - appdata:/app/data
     restart: unless-stopped
+
+volumes:
+  pgdata:
+  appdata:

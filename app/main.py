@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from .db import LOCK_CLEANUP, advisory_lock, apply_migrations, close_pools, open_pools
 from .routers import upload
 from .routers import jobs
 from .dashboard import create_dash_app
@@ -17,6 +18,8 @@ BASE_DIR = Path(__file__).parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await open_pools()
+    await apply_migrations()
     await init_db()
     app.state.executor = ThreadPoolExecutor(
         max_workers=min(4, os.cpu_count() or 2)
@@ -28,12 +31,17 @@ async def lifespan(app: FastAPI):
     app.state.executor.shutdown(wait=False)
     app.state.ocr_executor.shutdown(wait=False)
     await close_db()
+    await close_pools()
 
 
 async def _cleanup_loop():
     while True:
         await asyncio.sleep(300)
-        await cleanup_stale_jobs()
+        # Every uvicorn worker runs this loop. The advisory lock keeps them from
+        # deleting the same stale jobs concurrently.
+        async with advisory_lock(LOCK_CLEANUP) as got:
+            if got:
+                await cleanup_stale_jobs()
 
 
 app = FastAPI(

@@ -1,4 +1,3 @@
-import tempfile
 import os
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
@@ -8,20 +7,39 @@ from httpx2 import ASGITransport, AsyncClient
 
 from app.services.extractor import EXPECTED_COLUMNS
 
+# A real PostgreSQL server is required. Start it with:
+#   docker compose up -d postgres
+DATABASE_URL_TEST = os.getenv(
+    "DATABASE_URL_TEST", "postgresql://dnit:dnit@localhost:5433/dnit_test"
+)
+
 
 @pytest.fixture(autouse=True)
 async def setup_storage(tmp_path):
+    """Give each test a private storage directory and a virgin database schema.
+
+    The schema is dropped and rebuilt from ``migrations/`` per test: with a
+    server-side database there is no per-test file to point at, so isolation has
+    to come from resetting the schema instead.
+    """
     os.environ["STORAGE_PATH"] = str(tmp_path / "data")
     import app.config as config
     config.STORAGE_PATH = tmp_path / "data"
-    config.DB_PATH = config.STORAGE_PATH / "extractor.db"
+    config.DATABASE_URL = DATABASE_URL_TEST
     config.STORAGE_PATH.mkdir(parents=True, exist_ok=True)
     (config.STORAGE_PATH / "jobs").mkdir(exist_ok=True)
+
+    from app import db
+    await db.open_pools()
+    async with db.acquire() as conn:
+        await conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
+    await db.apply_migrations()
 
     from app.services.job_manager import init_db, close_db
     await init_db()
     yield
     await close_db()
+    await db.close_pools()
 
 
 @pytest.fixture()
