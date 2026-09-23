@@ -39,6 +39,11 @@ escolhida de forma independente. Falta de índice publicado aparece como pendên
 com subtotal por produto e total geral; só o ΔP entra como valor. A **memória de
 cálculo** é preservada como equação nativa, vetorial e imprimível.
 
+**Uma trilha de seis etapas.** Em qualquer tela, o cabeçalho mostra em que ponto
+o contrato está — upload, cadastro, região da ANP, códigos pendentes, memória de
+cálculo, exportação — e cada etapa leva à tela que a resolve. Quando a planilha
+está bloqueada, o motivo aparece junto do botão, não em outro lugar.
+
 **Cadastro do contrato.** Os campos que nenhum PDF traz (Edital, Rodovia, Trecho,
 Subtrecho, Segmento, Extensão, Contratada) são cadastrados por número de contrato
 e preenchem o cabeçalho da planilha. *Data Base* e *Processo* ficam somente em
@@ -165,7 +170,8 @@ app/
 ├── dashboard/     Aplicação Dash em /dashboard
 ├── templates/     HTML (Jinja2) da página de upload
 ├── templates_xlsx/Template inicial da planilha (semente do banco)
-└── static/        CSS e JS
+└── static/        CSS, JS e fontes (Inter, JetBrains Mono, Material Symbols
+                   Outlined) hospedadas localmente — sem CDN
 tests/             Suíte pytest
 ```
 

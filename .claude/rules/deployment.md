@@ -56,7 +56,7 @@ the table below in the same change.
 | Variable | Default | Purpose |
 |---|---|---|
 | `APP_ENV` | `development` | Runtime environment label |
-| `DATABASE_URL` | `postgresql://dnit:dnit@localhost:5432/dnit` | Application database |
+| `DATABASE_URL` | `postgresql://dnit:dnit@localhost:5433/dnit` | Application database |
 | `DATABASE_URL_TEST` | `postgresql://dnit:dnit@localhost:5433/dnit_test` | Test suite only |
 | `STORAGE_PATH` | `<project>/data` | Uploads and JSON extraction artefacts |
 | `BACKUP_DIR` | `$STORAGE_PATH/backups` | Where `pg_dump` writes |

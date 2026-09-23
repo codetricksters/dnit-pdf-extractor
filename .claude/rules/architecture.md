@@ -21,7 +21,7 @@ app/
 ├── config.py                  # Env-driven settings (DATABASE_URL, STORAGE_PATH, backup knobs, PG_BIN)
 ├── db.py                      # psycopg pools (async + sync), advisory locks, migration runner
 ├── static/                    # Client-side assets served at /static/*
-├── templates/                 # Jinja2 HTML (base.html, index.html)
+├── templates/                 # Jinja2 HTML (base.html shell, _sidebar, _topbar, index.html)
 ├── templates_xlsx/
 │   └── reequilibrio_template.xlsx   # Seed template only; the live source is the database
 ├── models/
@@ -42,6 +42,7 @@ app/
 │   ├── catalogo.py            # Products, service codes, family suggestion, pendências
 │   ├── contratos_repo.py      # Contract: PDF fields + user registration, region per family
 │   ├── medicoes_repo.py       # Idempotent persistence of measurement items
+│   ├── progresso.py           # The six-step trail and the counters shown in the shell
 │   ├── delta_p.py             # ΔP per family, pure Decimal arithmetic
 │   ├── reequilibrio_export.py # .xlsx generation from the active template (live formulas)
 │   ├── reequilibrio_layout.py # Cell addresses and formula strings of the template
@@ -50,8 +51,8 @@ app/
 │   └── backup.py              # pg_dump/pg_restore, retention, scheduled run
 └── dashboard/                 # Dash app mounted at /dashboard via a2wsgi (synchronous)
     ├── __init__.py            # create_dash_app()
-    ├── layout.py              # Shell only: navbar, contract selector, tabs, styles
-    ├── views.py               # Pure render functions, one per tab
+    ├── layout.py              # Shell only: sidebar, step trail, contract selector, styles
+    ├── views.py                # Pure render functions, one per screen
     ├── callbacks.py           # Wiring: read the DB, render, write through the services
     └── data_loader.py         # Reads the DB and reuses the export's calculation
 requirements.txt               # Flat dependency list (used by pip / Docker)
