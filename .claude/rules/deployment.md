@@ -42,9 +42,16 @@ The `Dockerfile` installs:
 
 ## Environment Variables
 
-Declared in `.env`. That file is **git-ignored** — it carries database
-credentials — so treat the table below as the authoritative list and keep `.env`
-in sync by hand on each machine.
+`.env.example` is the committed template; `.env` is **git-ignored** because it
+carries the database password. On a new machine:
+
+```bash
+cp .env.example .env    # then replace TROQUE_ESTA_SENHA
+```
+
+The password in `DATABASE_URL` must match `POSTGRES_PASSWORD` in
+`docker-compose.yml`. When a variable is added, add it to `.env.example` and to
+the table below in the same change.
 
 | Variable | Default | Purpose |
 |---|---|---|

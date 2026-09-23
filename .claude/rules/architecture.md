@@ -4,7 +4,8 @@
 
 ```
 main.py                        # Thin entry point — re-exports app for uvicorn (main:app)
-.env                           # Environment variable template (untracked: it carries credentials)
+.env.example                   # Committed template for the environment variables
+.env                           # Local copy with the real password (untracked)
 migrations/                    # Numbered SQL migrations, applied in order at startup
 ├── 001_jobs.sql               # jobs, file_results, schema_migrations
 ├── 002_indices.sql            # anp_preco_semanal, indice_mensal
