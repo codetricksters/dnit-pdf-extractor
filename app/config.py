@@ -14,6 +14,10 @@ MIGRATIONS_PATH = PROJECT_ROOT / "migrations"
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", str(STORAGE_PATH / "backups")))
 BACKUP_RETENTION = int(os.getenv("BACKUP_RETENTION", "14"))
 BACKUP_INTERVAL_HOURS = int(os.getenv("BACKUP_INTERVAL_HOURS", "24"))
+# Directory holding pg_dump/pg_restore. Set it when the machine has several
+# PostgreSQL client versions installed and the one on PATH does not match the
+# server: a dump taken by a newer client cannot be restored into an older server.
+PG_BIN = os.getenv("PG_BIN") or None
 
 STORAGE_PATH.mkdir(parents=True, exist_ok=True)
 (STORAGE_PATH / "jobs").mkdir(exist_ok=True)

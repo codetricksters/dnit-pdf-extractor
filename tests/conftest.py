@@ -26,6 +26,9 @@ async def setup_storage(tmp_path):
     import app.config as config
     config.STORAGE_PATH = tmp_path / "data"
     config.DATABASE_URL = DATABASE_URL_TEST
+    # Read at call time by the backup service, so this keeps dumps out of the
+    # developer's real data directory.
+    config.BACKUP_DIR = tmp_path / "data" / "backups"
     config.STORAGE_PATH.mkdir(parents=True, exist_ok=True)
     (config.STORAGE_PATH / "jobs").mkdir(exist_ok=True)
 
