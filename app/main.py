@@ -15,6 +15,7 @@ from .db import (
     close_pools,
     open_pools,
 )
+from .routers import admin
 from .routers import upload
 from .routers import jobs
 from .dashboard import create_dash_app
@@ -73,5 +74,6 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 app.include_router(upload.router)
 app.include_router(jobs.router)
+app.include_router(admin.router)
 
 app.mount("/dashboard", create_dash_app())

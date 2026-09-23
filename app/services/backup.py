@@ -105,6 +105,11 @@ def _caminho(nome: str) -> Path:
     return _diretorio() / nome
 
 
+def caminho_de(nome: str) -> Path:
+    """Where a backup with this name lives, for callers that serve the file."""
+    return _caminho(nome)
+
+
 def _executar(comando: list[str], erro: str) -> subprocess.CompletedProcess:
     resultado = subprocess.run(
         comando,
