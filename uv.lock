@@ -409,6 +409,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "xlrd" },
 ]
 
 [package.dev-dependencies]
@@ -416,7 +417,6 @@ dev = [
     { name = "httpx2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "xlrd" },
 ]
 
 [package.metadata]
@@ -437,6 +437,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
+    { name = "xlrd", specifier = ">=2.0.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -444,7 +445,6 @@ dev = [
     { name = "httpx2", specifier = ">=2.4.0" },
     { name = "pytest", specifier = ">=9.1.0" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
-    { name = "xlrd", specifier = ">=2.0.2" },
 ]
 
 [[package]]
