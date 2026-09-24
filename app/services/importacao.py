@@ -119,7 +119,9 @@ def importar_precos(
 
     if not simular:
         indices_repo.gravar_precos_anp(
-            plano.gravar, origem=origem or indices_repo.origem_upload(arquivo)
+            plano.gravar,
+            origem=origem or indices_repo.origem_upload(arquivo),
+            sobrescrever_manuais=sobrescrever_manuais,
         )
     return _resposta(
         arquivo, simular, sobrescrever_manuais, plano, leitura.avisos,
@@ -143,7 +145,9 @@ def importar_indices(
     )
     if not simular:
         indices_repo.gravar_indices_mensais(
-            plano.gravar, origem=origem or indices_repo.origem_upload(arquivo)
+            plano.gravar,
+            origem=origem or indices_repo.origem_upload(arquivo),
+            sobrescrever_manuais=sobrescrever_manuais,
         )
     return _resposta(
         arquivo, simular, sobrescrever_manuais, plano, leitura.avisos,

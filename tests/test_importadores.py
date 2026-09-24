@@ -115,32 +115,56 @@ def test_arquivo_oficial():
 
 
 # --- sobreposições -------------------------------------------------------------
+#
+# ``sobreposicoes()`` foi removida: era uma verificação preliminar que
+# ignorava semanas manuais preservadas, e nada em produção a chamava —
+# ``importacao.importar_precos`` já usa ``sobreposicoes_marcadas`` direto,
+# contra o estado que o plano de fato vai gravar (ver seu docstring). Estes
+# testes exercitam ``sobreposicoes_marcadas`` com as mesmas tags que
+# ``importacao`` monta.
+
+
+def _entrada(sem: dict, tag: str) -> tuple:
+    return (sem["produto"], sem["regiao"], sem["vigencia_inicio"], sem["vigencia_fim"], tag)
+
 
 def test_sobreposicao_dentro_do_arquivo():
-    novos = [semana(date(2023, 1, 9), 1), semana(date(2023, 1, 12), 1)]
-    (erro,) = importadores.sobreposicoes(novos, {})
+    entradas = [
+        _entrada(semana(date(2023, 1, 9), 1), importadores.TAG_ARQUIVO),
+        _entrada(semana(date(2023, 1, 12), 1), importadores.TAG_ARQUIVO),
+    ]
+    (erro,) = importadores.sobreposicoes_marcadas(entradas)
     assert "do próprio arquivo" in erro and "12/01/2023" in erro
 
 
 def test_sobreposicao_com_semana_cadastrada():
-    existente = semana(date(2023, 1, 9), 1)
-    existentes = {(CAP, existente["vigencia_inicio"], "Nordeste"): existente}
-    (erro,) = importadores.sobreposicoes([semana(date(2023, 1, 12), 1)], existentes)
+    entradas = [
+        _entrada(semana(date(2023, 1, 9), 1), importadores.TAG_EXISTENTE),
+        _entrada(semana(date(2023, 1, 12), 1), importadores.TAG_ARQUIVO),
+    ]
+    (erro,) = importadores.sobreposicoes_marcadas(entradas)
     assert "já cadastrada" in erro and "09/01/2023" in erro
 
 
 def test_mesma_semana_do_arquivo_substitui_a_cadastrada():
-    existente = semana(date(2023, 1, 9), 1, dias=10)
-    existentes = {(CAP, existente["vigencia_inicio"], "Nordeste"): existente}
-    novos = [semana(date(2023, 1, 9), 1), semana(date(2023, 1, 16), 1)]
-    assert importadores.sobreposicoes(novos, existentes) == []
+    """A mesma ``vigencia_inicio`` só entra uma vez em ``sobreposicoes_marcadas``
+    — quem monta as entradas decide qual tag prevalece; aqui é a do arquivo."""
+    entradas = [
+        _entrada(semana(date(2023, 1, 9), 1, dias=10), importadores.TAG_EXISTENTE),
+        _entrada(semana(date(2023, 1, 9), 1), importadores.TAG_ARQUIVO),
+        _entrada(semana(date(2023, 1, 16), 1), importadores.TAG_ARQUIVO),
+    ]
+    assert importadores.sobreposicoes_marcadas(entradas) == []
 
 
 def test_sobreposicao_entre_cadastradas_nao_e_do_arquivo():
     """Só se reporta o que envolve o arquivo; o banco já proíbe o resto."""
-    a, b = semana(date(2023, 1, 9), 1), semana(date(2023, 1, 12), 1)
-    existentes = {(CAP, s["vigencia_inicio"], "Nordeste"): s for s in (a, b)}
-    assert importadores.sobreposicoes([semana(date(2023, 2, 6), 1)], existentes) == []
+    entradas = [
+        _entrada(semana(date(2023, 1, 9), 1), importadores.TAG_EXISTENTE),
+        _entrada(semana(date(2023, 1, 12), 1), importadores.TAG_EXISTENTE),
+        _entrada(semana(date(2023, 2, 6), 1), importadores.TAG_ARQUIVO),
+    ]
+    assert importadores.sobreposicoes_marcadas(entradas) == []
 
 
 # --- IGP-DI ----------------------------------------------------------------------

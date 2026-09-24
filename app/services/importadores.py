@@ -264,29 +264,6 @@ def sobreposicoes_marcadas(entradas: list[tuple]) -> list[str]:
     return erros
 
 
-def sobreposicoes(novos: list[dict], existentes: dict) -> list[str]:
-    """Semanas do arquivo que se sobrepõem entre si ou às já cadastradas.
-
-    *existentes* vem de ``indices_repo.precos_anp_por_chave``. Uma semana do
-    arquivo com o mesmo início de uma cadastrada a substitui (é uma correção),
-    então só a do arquivo entra na verificação. Sobreposições só entre semanas
-    cadastradas não são reportadas: a constraint do banco já as impede.
-
-    Esta verificação é preliminar: assume que toda semana do arquivo será
-    gravada como está. Quando a gravação pode preservar um valor manual em vez
-    de sobrescrevê-lo, ``importacao.importar_precos`` verifica de novo com
-    ``sobreposicoes_marcadas``, contra o estado que o plano de fato vai gravar.
-    """
-    entradas = [
-        (produto, regiao, inicio, linha["vigencia_fim"], TAG_EXISTENTE)
-        for (produto, inicio, regiao), linha in existentes.items()
-    ]
-    entradas += [
-        (r["produto"], r["regiao"], r["vigencia_inicio"], r["vigencia_fim"], TAG_ARQUIVO)
-        for r in novos
-    ]
-    return sobreposicoes_marcadas(entradas)
-
 
 # --- IGP-DI ----------------------------------------------------------------------
 

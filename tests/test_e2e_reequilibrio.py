@@ -123,10 +123,11 @@ async def test_ponta_a_ponta(client):
     assert meses <= {f"2023-{m:02d}-01" for m in range(1, 13)}
     assert "2023-01-01" in meses
 
-    # O app soma f por produto, soma os subtotais de produto por família e só
-    # então soma os subtotais de família no total (reequilibrio_export.py,
-    # calcular(), linhas 459-485); a comparação replica a mesma ordem para
-    # ser bit exata em cada nível.
+    # reequilibrio_export.serializar() soma f por produto (o subtotal do
+    # produto), acumula esse subtotal na família e no total ao mesmo tempo —
+    # o total não é a soma dos subtotais de família, é a soma direta dos
+    # subtotais de produto. A comparação replica essa mesma ordem para ser bit
+    # exata em cada nível, e ainda confere o subtotal de família separadamente.
     total = Decimal(0)
     for familia in corpo["familias"]:
         subtotal_familia = Decimal(0)
@@ -150,8 +151,8 @@ async def test_ponta_a_ponta(client):
                 subtotal_produto += f
             assert Decimal(produto["subtotal"]) == subtotal_produto
             subtotal_familia += subtotal_produto
+            total += subtotal_produto
         assert Decimal(familia["subtotal"]) == subtotal_familia
-        total += subtotal_familia
     assert Decimal(corpo["total"]) == total
 
     janeiro_cap = [l for fam, _, l in linhas if fam == "CAP" and l["mes"] == "2023-01-01"]

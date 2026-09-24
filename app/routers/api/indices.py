@@ -82,7 +82,7 @@ async def _importar(funcao, arquivo: UploadFile, simular: bool, sobrescrever_man
     except ArquivoInvalido as e:
         raise ErroApi(422, e.mensagem, erros=e.erros) from e
     except indices_repo.IndiceInvalido as e:
-        raise ErroApi(422, str(e)) from e
+        raise ErroApi(422, str(e), erros=[str(e)]) from e
 
 
 @router.get("/cobertura", response_model=Cobertura)

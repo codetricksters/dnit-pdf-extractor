@@ -197,6 +197,38 @@ async def test_banco_proibe_semanas_sobrepostas():
     indices_repo.gravar_precos_anp([semana(date(2023, 1, 15), "3.30", regiao="Sul")])
 
 
+async def test_sobrescrever_manuais_falso_nao_regrava_linha_que_virou_manual():
+    """Fecha a corrida entre o plano e a gravação: mesmo que o chamador não
+    saiba que a linha passou a manual (por exemplo, planejou contra uma
+    leitura anterior do banco), a gravação em si tem de preservá-la quando
+    ``sobrescrever_manuais=False``."""
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28")], origem="upload:a.xls")
+    indices_repo.gravar_semana_manual(
+        {"vigencia_inicio": date(2023, 1, 9), "vigencia_fim": date(2023, 1, 15),
+         "regiao": "Nordeste", "preco": "9.99"}
+    )
+    indices_repo.gravar_precos_anp(
+        [semana(date(2023, 1, 9), "3.30")], origem="upload:b.xls", sobrescrever_manuais=False
+    )
+    salvo = indices_repo.buscar_semana(ANP_PRODUTO_CAP, "Nordeste", date(2023, 1, 9))
+    assert salvo["preco"] == Decimal("9.99") and salvo["origem"] == indices_repo.ORIGEM_MANUAL
+
+    indices_repo.gravar_precos_anp(
+        [semana(date(2023, 1, 9), "3.30")], origem="upload:b.xls", sobrescrever_manuais=True
+    )
+    salvo = indices_repo.buscar_semana(ANP_PRODUTO_CAP, "Nordeste", date(2023, 1, 9))
+    assert salvo["preco"] == Decimal("3.30") and salvo["origem"] == "upload:b.xls"
+
+
+async def test_sobrescrever_manuais_falso_no_indice_mensal_tambem_preserva():
+    indices_repo.gravar_indices_mensais([mes_igp(date(2023, 1, 1), "1000")], origem="upload:a")
+    indices_repo.gravar_indice_manual(date(2023, 1, 1), "9999")
+    indices_repo.gravar_indices_mensais(
+        [mes_igp(date(2023, 1, 1), "1234")], origem="upload:b", sobrescrever_manuais=False
+    )
+    assert indices_repo.buscar_indice(date(2023, 1, 1))["valor"] == Decimal("9999")
+
+
 async def test_vigencia_invertida_e_recusada_pelo_banco():
     with pytest.raises(indices_repo.IndiceInvalido):
         indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28", dias=-1)])

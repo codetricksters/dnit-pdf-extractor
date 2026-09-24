@@ -59,9 +59,10 @@ com subtotal por produto e total geral; só o ΔP entra como valor. A **memória
 cálculo** é preservada como equação nativa, vetorial e imprimível.
 
 **Uma trilha de seis etapas.** Em qualquer tela, o cabeçalho mostra em que ponto
-o contrato está — upload, cadastro, região da ANP, códigos pendentes, memória de
-cálculo, exportação — e cada etapa leva à tela que a resolve. Quando a planilha
-está bloqueada, o motivo aparece junto do botão, não em outro lugar.
+o contrato está — upload, cadastro, região da ANP, códigos pendentes (etapa
+informativa: como acima, não bloqueia o cálculo — revisão da trilha pendente),
+memória de cálculo, exportação — e cada etapa leva à tela que a resolve. Quando
+a planilha está bloqueada, o motivo aparece junto do botão, não em outro lugar.
 
 **Cadastro do contrato.** Os campos que nenhum PDF traz (Edital, Rodovia, Trecho,
 Subtrecho, Segmento, Extensão, Contratada) são cadastrados por contrato e

@@ -56,6 +56,13 @@ async def test_semana_sem_cotacao_e_aceita(client):
     assert resposta.json()["preco"] is None
 
 
+@pytest.mark.parametrize("preco", ["0", "-1"])
+async def test_semana_com_preco_zero_ou_negativo_e_422(client, preco):
+    resposta = await client.put("/api/v1/indices/anp", json={**SEMANA, "preco": preco})
+    assert resposta.status_code == 422
+    assert "maior que zero" in resposta.json()["detail"]
+
+
 async def test_semana_sobreposta_e_422(client):
     await client.put("/api/v1/indices/anp", json=SEMANA)
     resposta = await client.put(
@@ -112,6 +119,27 @@ async def test_importar_igp_previa_preserva_e_sobrescreve_manual(client):
     meses = {m["mes"]: m for m in (await client.get("/api/v1/indices/igp-di")).json()}
     assert meses["2023-01"]["valor"] == "1100"
     assert meses["2023-01"]["origem"] == "upload:igp.xlsx"
+
+
+async def test_importar_indice_invalido_na_gravacao_e_422_com_erros(client, monkeypatch):
+    """``SemanaSobreposta``/``IndiceInvalido`` também podem vir da gravação em
+    si (uma constraint do banco), não só da checagem prévia do arquivo — a
+    rota tem de devolver ``erros`` do mesmo jeito que faz para ``ArquivoInvalido``."""
+    from app.services import importacao, indices_repo
+
+    def _recusa(*_args, **_kwargs):
+        raise indices_repo.SemanaSobreposta("Uma semana se sobrepõe a outra já cadastrada.")
+
+    monkeypatch.setattr(indices_repo, "gravar_precos_anp", _recusa)
+    monkeypatch.setattr(importacao.indices_repo, "gravar_precos_anp", _recusa)
+    resposta = await client.post(
+        "/api/v1/indices/anp/importar",
+        files={"arquivo": ("anp.xls", ANP_OFICIAL.read_bytes())},
+    )
+    assert resposta.status_code == 422
+    corpo = resposta.json()
+    assert corpo["detail"] == "Uma semana se sobrepõe a outra já cadastrada."
+    assert corpo["erros"] == ["Uma semana se sobrepõe a outra já cadastrada."]
 
 
 async def test_importar_arquivo_invalido_lista_os_erros(client):

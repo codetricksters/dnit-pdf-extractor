@@ -88,6 +88,12 @@ runs in every worker. `advisory_lock(key)` wraps `pg_try_advisory_lock` so only
 one worker acts: `LOCK_CLEANUP = 8474001` (stale jobs), `LOCK_BACKUP = 8474002`
 (scheduled backup).
 
+`apply_migrations()`, also called from every worker's lifespan, instead takes
+the **blocking** `pg_advisory_lock` under `LOCK_MIGRATIONS = 8474003`: a loser
+here cannot just skip, like `advisory_lock`'s callers do — it still needs the
+schema up to date before it serves anything, so it waits for the winner to
+finish instead.
+
 ## Routing
 
 | Route | Handler | Notes |

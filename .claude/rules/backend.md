@@ -277,6 +277,18 @@ or `erros`. Contracts are addressed by numeric `id`; `GET /contratos?numero=`
 finds one by number. Index uploads are capped at 20 MB (413). The `X-Avisos`
 header (`calculo.py`) is sanitised to latin-1, since HTTP headers only accept it.
 
+Two different shapes of 422 reach the client, and there is no global exception
+handler smoothing them into one — callers must expect both:
+
+- **Pydantic validation** (a malformed body, an out-of-pattern path param) is
+  FastAPI's own 422, with `detail` as a **list of objects** (`loc`, `msg`,
+  `type`), before any router code runs.
+- **`ErroApi`** (`erros.py`) is raised deliberately by a router or a service
+  exception it catches (`ExportacaoImpossivel`, `TemplateInvalido`,
+  `IndiceInvalido`/`SemanaSobreposta`, `ArquivoInvalido`) — `detail` is a
+  **plain string**, optionally alongside `faltando` (cálculo/planilha) or
+  `erros` (importação de índices).
+
 ## Dashboard
 
 `layout.py` builds only the shell; each tab's content is rendered by a callback

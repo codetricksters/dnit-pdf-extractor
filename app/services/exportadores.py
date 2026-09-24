@@ -16,6 +16,18 @@ from .importadores import gerar_template_igp_di
 COLUNAS_ANP = ("produto", "vigencia_inicio", "vigencia_fim", "regiao", "preco", "origem", "atualizado_em")
 COLUNAS_IGP = ("mes", "valor", "origem", "atualizado_em")
 
+# Caracteres que o Excel (e o openpyxl) tratam como início de fórmula. Um
+# ``produto`` ou ``regiao`` gravado com um desses no começo não pode virar
+# fórmula na planilha exportada — é dado do usuário, não código.
+_CARACTERES_FORMULA = ("=", "+", "-", "@")
+
+
+def _protege_formulas(ws, linha: int) -> None:
+    """Marca como texto qualquer célula de *linha* cujo valor pareça fórmula."""
+    for celula in ws[linha]:
+        if isinstance(celula.value, str) and celula.value.startswith(_CARACTERES_FORMULA):
+            celula.data_type = "s"
+
 
 def _texto(valor) -> str:
     if valor is None:
@@ -57,6 +69,7 @@ def precos_xlsx(linhas: list[dict]) -> bytes:
         ])
         for coluna in (2, 3):
             ws.cell(ws.max_row, coluna).number_format = "dd/mm/yyyy"
+        _protege_formulas(ws, ws.max_row)
     ws.freeze_panes = "A2"
     ws.column_dimensions["A"].width = 48
     saida = io.BytesIO()

@@ -323,3 +323,6 @@ async def test_listar_traz_resumo_e_filtra_por_numero():
     assert "regiao_emulsoes" in linha["faltantes"]
     assert contratos_repo.listar("00134") == [linha]
     assert contratos_repo.listar("99999") == []
+    # "%" e "_" digitados são texto literal, não curingas do ILIKE.
+    assert contratos_repo.listar("%") == []
+    assert contratos_repo.listar("_") == []

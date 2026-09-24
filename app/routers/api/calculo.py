@@ -78,6 +78,8 @@ async def planilha(
         gerado = await asyncio.to_thread(reequilibrio_export.gerar, resultado, template)
     except TemplateInvalido as e:
         raise ErroApi(422, str(e)) from e
+    except ExportacaoImpossivel as e:
+        raise ErroApi(422, e.mensagem, faltando=e.faltando) from e
     nome = nome_do_arquivo(resultado.contrato["numero"], resultado.simuladas)
     return Response(
         content=gerado.conteudo,

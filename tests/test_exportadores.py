@@ -46,6 +46,17 @@ def test_precos_xlsx():
     assert ws["G2"].value == "2026-09-24T13:05:00+00:00"
 
 
+def test_precos_xlsx_nao_deixa_produto_virar_formula():
+    """Um ``produto`` (dado do usuário, via cadastro de código) começando com
+    ``=``, ``+``, ``-`` ou ``@`` não pode ser interpretado como fórmula pelo
+    Excel na planilha exportada."""
+    malicioso = [{**PRECOS[0], "produto": "=HYPERLINK(1)"}]
+    ws = openpyxl.load_workbook(io.BytesIO(exportadores.precos_xlsx(malicioso))).active
+    celula = ws["A2"]
+    assert celula.value == "=HYPERLINK(1)"
+    assert celula.data_type == "s"
+
+
 def test_indices_csv():
     (linha,) = _csv(exportadores.indices_csv(INDICES))
     assert linha == {"mes": "2022-01", "valor": "1110.398", "origem": "seed",

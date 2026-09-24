@@ -132,6 +132,24 @@ async def test_indices_ausentes_sao_422_com_faltando(client):
         assert all(f in corpo["detail"] for f in corpo["faltando"])
 
 
+async def test_gerar_impossivel_na_planilha_e_422_com_faltando(client, monkeypatch):
+    """``reequilibrio_export.gerar`` também pode recusar (ex.: template sem a
+    aba REEQUILÍBRIO), não só ``calcular`` — a rota tem de tratar os dois."""
+    from app.routers.api import calculo
+    from app.services.reequilibrio_export import ExportacaoImpossivel
+
+    def _recusa(*_args, **_kwargs):
+        raise ExportacaoImpossivel("O template não contém a aba 'REEQUILÍBRIO'.", ["template"])
+
+    monkeypatch.setattr(calculo.reequilibrio_export, "gerar", _recusa)
+    contrato_id = _contrato()
+    resposta = await client.get(f"/api/v1/contratos/{contrato_id}/planilha")
+    assert resposta.status_code == 422
+    corpo = resposta.json()
+    assert corpo["faltando"] == ["template"]
+    assert "REEQUILÍBRIO" in corpo["detail"]
+
+
 async def test_regiao_sem_precos_na_simulacao_e_422(client):
     contrato_id = _contrato()
     resposta = await client.get(

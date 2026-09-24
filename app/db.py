@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # changing one lets two workers run the same task concurrently.
 LOCK_CLEANUP = 8474001
 LOCK_BACKUP = 8474002
+LOCK_MIGRATIONS = 8474003
 
 _apool: AsyncConnectionPool | None = None
 _spool: ConnectionPool | None = None
@@ -117,23 +118,43 @@ async def apply_migrations() -> list[str]:
     Each file runs in its own transaction and is recorded in
     ``schema_migrations``, so a failure leaves the database at the last good
     migration instead of half-applied.
+
+    ``deployment.md`` recommends ``--workers 2``, and every worker calls this
+    from the lifespan at startup. Unlike ``advisory_lock`` (which lets a loser
+    skip the periodic task), a worker that loses here still needs the schema
+    up to date before it serves anything — so it takes the **blocking**
+    ``pg_advisory_lock`` and waits for the winner to finish, rather than
+    skipping its own migrations.
     """
     applied: list[str] = []
     files = sorted(p for p in config.MIGRATIONS_PATH.glob("*.sql"))
     async with acquire() as conn:
-        await conn.execute(_MIGRATIONS_TABLE)
-        cur = await conn.execute("SELECT filename FROM schema_migrations")
-        done = {r["filename"] for r in await cur.fetchall()}
+        await conn.execute("SELECT pg_advisory_lock(%s)", (LOCK_MIGRATIONS,))
+        await conn.commit()
+        try:
+            await conn.execute(_MIGRATIONS_TABLE)
+            cur = await conn.execute("SELECT filename FROM schema_migrations")
+            done = {r["filename"] for r in await cur.fetchall()}
+            await conn.commit()
 
-    for path in files:
-        if path.name in done:
-            continue
-        sql = path.read_text(encoding="utf-8")
-        async with acquire() as conn:
-            await conn.execute(sql)
-            await conn.execute(
-                "INSERT INTO schema_migrations (filename) VALUES (%s)", (path.name,)
-            )
-        applied.append(path.name)
-        logger.info("Applied migration %s", path.name)
+            for path in files:
+                if path.name in done:
+                    continue
+                sql = path.read_text(encoding="utf-8")
+                await conn.execute(sql)
+                await conn.execute(
+                    "INSERT INTO schema_migrations (filename) VALUES (%s)", (path.name,)
+                )
+                await conn.commit()
+                applied.append(path.name)
+                logger.info("Applied migration %s", path.name)
+        except Exception:
+            # pg_advisory_lock não é transacional; um rollback aqui só desfaz
+            # a migração que falhou, para o unlock (abaixo) poder ser
+            # executado — a conexão fica abortada até o rollback.
+            await conn.rollback()
+            raise
+        finally:
+            await conn.execute("SELECT pg_advisory_unlock(%s)", (LOCK_MIGRATIONS,))
+            await conn.commit()
     return applied

@@ -127,6 +127,11 @@ _UPSERT_INDICE = (
     "origem = EXCLUDED.origem, atualizado_em = now()"
 )
 _SO_SE_MUDOU_INDICE = " WHERE i.valor IS DISTINCT FROM EXCLUDED.valor"
+# Acrescentado quando a gravação deve preservar o que é manual mesmo que o
+# planejamento (feito antes, contra uma leitura anterior do banco) não tenha
+# visto isso: fecha a corrida entre planejar() e a gravação de fato.
+_PRESERVAR_MANUAL_ANP = " AND a.origem <> 'manual'"
+_PRESERVAR_MANUAL_INDICE = " AND i.origem <> 'manual'"
 
 
 def _executar_anp(sql: str, linhas: list[dict]) -> None:
@@ -152,24 +157,37 @@ def _executar_indices(sql: str, linhas: list[dict]) -> None:
             cur.executemany(sql, linhas)
 
 
-def gravar_precos_anp(registros: list[dict], origem: str = ORIGEM_MANUAL) -> int:
+def gravar_precos_anp(
+    registros: list[dict], origem: str = ORIGEM_MANUAL, *, sobrescrever_manuais: bool = True
+) -> int:
     """Insert or update weekly ANP prices, rewriting only what changed.
 
     Each record needs ``produto``, ``vigencia_inicio``, ``vigencia_fim``,
     ``regiao`` and ``preco`` (``None`` where the source publishes ``***``).
+
+    ``sobrescrever_manuais=False`` refuses to rewrite a row that is
+    ``origem = 'manual'`` **no momento da gravação** — não apenas no
+    planejamento —, o que fecha a corrida em que a linha passa a manual entre
+    o plano e a escrita. O padrão (``True``) preserva o comportamento anterior:
+    a semente e a gravação manual sempre sobrescrevem.
     """
     if not registros:
         return 0
     linhas = [{**r, "origem": origem} for r in registros]
-    _executar_anp(_UPSERT_ANP + _SO_SE_MUDOU_ANP, linhas)
+    sql = _UPSERT_ANP + _SO_SE_MUDOU_ANP
+    if not sobrescrever_manuais:
+        sql += _PRESERVAR_MANUAL_ANP
+    _executar_anp(sql, linhas)
     return len(linhas)
 
 
-def gravar_indices_mensais(registros: list[dict], origem: str = ORIGEM_MANUAL) -> int:
+def gravar_indices_mensais(
+    registros: list[dict], origem: str = ORIGEM_MANUAL, *, sobrescrever_manuais: bool = True
+) -> int:
     """Insert or update monthly indices, rewriting only what changed.
 
     Each record needs ``indice``, ``mes_ref``, ``valor`` and optionally
-    ``base_label``.
+    ``base_label``. See ``gravar_precos_anp`` for ``sobrescrever_manuais``.
     """
     if not registros:
         return 0
@@ -183,7 +201,10 @@ def gravar_indices_mensais(registros: list[dict], origem: str = ORIGEM_MANUAL) -
         }
         for r in registros
     ]
-    _executar_indices(_UPSERT_INDICE + _SO_SE_MUDOU_INDICE, linhas)
+    sql = _UPSERT_INDICE + _SO_SE_MUDOU_INDICE
+    if not sobrescrever_manuais:
+        sql += _PRESERVAR_MANUAL_INDICE
+    _executar_indices(sql, linhas)
     return len(linhas)
 
 
@@ -242,8 +263,8 @@ def gravar_semana_manual(registro: dict) -> dict:
     preco = registro.get("preco")
     if preco is not None:
         preco = Decimal(str(preco))
-        if preco < 0:
-            raise IndiceInvalido("O preço não pode ser negativo.")
+        if preco <= 0:
+            raise IndiceInvalido("O preço deve ser maior que zero.")
     candidatas = list(dict.fromkeys([*REGIOES, *regioes_disponiveis(produto)]))
     regiao = _grafia(registro.get("regiao"), candidatas)
     if regiao is None:
