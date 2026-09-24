@@ -9,7 +9,6 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from ..db import acquire_sync
-from . import catalogo
 from .contratos_repo import mes_da_medicao
 
 # Same rule the extractor uses to recognise a record: a 4+-digit service code.
@@ -32,23 +31,18 @@ def _decimal(valor) -> Decimal | None:
         return None
 
 
-def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) -> dict:
-    """Store the item rows of one extracted file.
+def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) -> int:
+    """Store the item rows of one extracted file; returns how many were stored.
 
     Idempotent: the ``UNIQUE (contrato_id, codigo_servico, mes_medicao,
     source_file)`` key means reprocessing the same PDF updates its rows instead
     of duplicating them.
 
-    Unknown codes are registered as pending (with a suggested family) when their
-    description looks like an asphalt product. Codes for unrelated services —
-    terraplenagem, drenagem — yield no suggestion and are stored without
-    creating review noise.
-
-    Returns counts of what was stored and what needs review.
+    Every item with a service code is stored, associated in the catalogue or
+    not: associating a code later brings its past items into the calculation
+    without reprocessing the PDFs.
     """
     registros = []
-    pendencias: list[str] = []
-    confirmados = catalogo.codigos_confirmados()
 
     for row in rows:
         codigo = str(row.get("Serviço") or "").strip()
@@ -60,16 +54,11 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
         if mes is None or valor_pi is None or fator is None:
             continue
 
-        descricao = str(row.get("Descrição") or "").strip()
-        if codigo not in confirmados:
-            if catalogo.registrar_pendencia(codigo, descricao) is not None:
-                pendencias.append(codigo)
-
         registros.append(
             {
                 "contrato_id": contrato_id,
                 "codigo_servico": codigo,
-                "descricao_pdf": descricao,
+                "descricao_pdf": str(row.get("Descrição") or "").strip(),
                 "mes_medicao": mes,
                 "valor_pi": valor_pi,
                 "fator": fator,
@@ -94,14 +83,13 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
                     registros,
                 )
 
-    return {"itens": len(registros), "pendencias": sorted(set(pendencias))}
+    return len(registros)
 
 
 def itens_para_export(contrato_id: int) -> list[dict]:
     """Items that belong in the spreadsheet, ordered family → product → month.
 
-    Only confirmed codes: an unreviewed code stays out of the calculation so a
-    misclassified material cannot distort the result unnoticed.
+    Only codes associated with a product: the rest stays out of the calculation.
     """
     with acquire_sync() as conn:
         cur = conn.execute(
@@ -111,7 +99,7 @@ def itens_para_export(contrato_id: int) -> list[dict]:
             "FROM medicao_item m "
             "JOIN produto_codigo pc ON pc.codigo_servico = m.codigo_servico "
             "JOIN produto p ON p.id = pc.produto_id "
-            "WHERE m.contrato_id = %s AND pc.confirmado "
+            "WHERE m.contrato_id = %s "
             # m.id DESC last so that, when the same measurement arrives under two
             # file names, the most recently stored row comes first and the export
             # keeps that one.

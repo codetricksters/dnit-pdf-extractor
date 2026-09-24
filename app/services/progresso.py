@@ -16,7 +16,7 @@ missing índices).
 from dataclasses import dataclass, field
 
 from ..db import acquire_sync
-from . import catalogo, contratos_repo
+from . import contratos_repo
 from .delta_p import FAMILIAS
 
 # The status names are also the CSS suffixes (``step-done``, …), so the template
@@ -147,7 +147,9 @@ def resumo(numero: str | None = None) -> Resumo:
         contrato = contratos_repo.buscar(contratos[0]["numero"])
 
     faltantes = contratos_repo.campos_faltantes(contrato) if contrato else []
-    pendencias = len(catalogo.listar_pendencias())
+    # Códigos sem associação deixaram de ser pendência (subprojeto A); a
+    # trilha inteira é revista no subprojeto B.
+    pendencias = 0
 
     return Resumo(
         contrato=contrato,

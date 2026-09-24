@@ -34,15 +34,10 @@ def _persistir(result: dict, filename: str, job_id: str) -> None:
                 filename,
             )
             return
-        resumo = medicoes_repo.gravar_itens(
+        itens = medicoes_repo.gravar_itens(
             contrato_id, result.get("rows") or [], job_id=job_id
         )
-        if resumo["pendencias"]:
-            logger.info(
-                "'%s': códigos novos aguardando confirmação: %s",
-                filename,
-                ", ".join(resumo["pendencias"]),
-            )
+        logger.info("'%s': %d item(ns) gravado(s) no banco.", filename, itens)
     except Exception:
         logger.exception("'%s': falha ao gravar a extração no banco.", filename)
 

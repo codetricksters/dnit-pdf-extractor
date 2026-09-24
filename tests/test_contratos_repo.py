@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.services import catalogo, contratos_repo, medicoes_repo
+from app.services import contratos_repo, medicoes_repo
 from app.services.delta_p import FAMILIA_CAP, FAMILIA_EMULSOES
 
 # Exactly as it comes out of the PDFs: the number, the contractor and the
@@ -167,10 +167,10 @@ async def test_gravar_itens_e_idempotente():
         _linha("29083", "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C", 50000.0, 1.0512),
     ]
     primeiro = medicoes_repo.gravar_itens(contrato_id, linhas, job_id="job1")
-    assert primeiro["itens"] == 2
+    assert primeiro == 2
 
     segundo = medicoes_repo.gravar_itens(contrato_id, linhas, job_id="job2")
-    assert segundo["itens"] == 2
+    assert segundo == 2
     assert len(medicoes_repo.itens_para_export(contrato_id)) == 2
 
 
@@ -184,7 +184,7 @@ async def test_linhas_sem_codigo_de_servico_sao_ignoradas():
             _linha("8300980", "AQUISIÇÃO DE CAP 50/70", 10.0, 1.0),
         ],
     )
-    assert resumo["itens"] == 1
+    assert resumo == 1
 
 
 async def test_item_sem_mes_e_descartado():
@@ -193,37 +193,15 @@ async def test_item_sem_mes_e_descartado():
     resumo = medicoes_repo.gravar_itens(
         contrato_id, [_linha("8300980", "AQUISIÇÃO DE CAP 50/70", 10.0, 1.0, periodo="")]
     )
-    assert resumo["itens"] == 0
+    assert resumo == 0
 
 
-async def test_codigo_nao_confirmado_fica_fora_do_export():
+async def test_servico_sem_associacao_e_gravado_mas_fica_fora_do_calculo():
     contrato_id = contratos_repo.registrar_do_pdf(HEADER)
-    resumo = medicoes_repo.gravar_itens(
-        contrato_id,
-        [
-            _linha("8300980", "AQUISIÇÃO DE CAP 50/70", 100.0, 1.0),
-            _linha("777126", "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-2C - TSD", 200.0, 1.0),
-        ],
-    )
-    assert resumo["pendencias"] == ["777126"]
-
-    codigos = {i["codigo_servico"] for i in medicoes_repo.itens_para_export(contrato_id)}
-    assert codigos == {"8300980"}
-
-    # Confirming brings it in without reprocessing the PDF.
-    catalogo.confirmar_codigo("777126")
-    codigos = {i["codigo_servico"] for i in medicoes_repo.itens_para_export(contrato_id)}
-    assert codigos == {"8300980", "777126"}
-
-
-async def test_servico_alheio_nao_gera_pendencia():
-    """Terraplenagem and friends must not flood the review list."""
-    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
-    resumo = medicoes_repo.gravar_itens(
+    gravados = medicoes_repo.gravar_itens(
         contrato_id, [_linha("54393", "ESCAVAÇÃO, CARGA E TRANSPORTE", 500.0, 1.0)]
     )
-    assert resumo["itens"] == 1  # the fact is stored
-    assert resumo["pendencias"] == []  # but nothing to review
+    assert gravados == 1
     assert medicoes_repo.itens_para_export(contrato_id) == []
 
 

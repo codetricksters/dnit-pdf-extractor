@@ -130,9 +130,7 @@ def register_callbacks(app):
         if aba == "cadastro":
             return views.tela_cadastro(contrato)
         if aba == "pendencias":
-            return views.tela_pendencias(
-                catalogo.listar_pendencias(), catalogo.listar_produtos()
-            )
+            return views.tela_pendencias([], catalogo.listar_produtos())
         if aba == "indices":
             return views.tela_indices(indices_repo.cobertura())
         if aba == "administracao":
@@ -207,7 +205,7 @@ def register_callbacks(app):
         )
         if not produto_id:
             return _aviso("Escolha o produto antes de confirmar.", "warning"), no_update
-        catalogo.registrar_codigo(codigo, produto_id, confirmado=True)
+        catalogo.registrar_codigo(codigo, produto_id)
         return _aviso(f"Código {codigo} confirmado."), recarregar + 1
 
     @app.callback(

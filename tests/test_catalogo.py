@@ -1,86 +1,190 @@
-"""Catalogue: code → product mapping, family suggestion and pending review."""
+"""Catálogo: produtos do usuário e a associação código → produto."""
 
 import pytest
 
-from app.services import catalogo
+from app.db import acquire_sync
+from app.services import catalogo, contratos_repo, medicoes_repo
 from app.services.delta_p import FAMILIA_CAP, FAMILIA_EMULSOES
 
-
-@pytest.mark.parametrize(
-    "descricao,esperado",
-    [
-        ("AQUISIÇÃO DE CIMENTO ASFÁLTICO CAP 50/70", FAMILIA_CAP),
-        ("AQUISICAO DE CAP 50/70", FAMILIA_CAP),  # OCR without accents
-        ("AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C", FAMILIA_EMULSOES),
-        ("AQUISIÇÃO DE EMULSÃO ASFÁLTICA PARA IMPRIMAÇÃO", FAMILIA_EMULSOES),
-        ("AQUISIÇÃO RC-1C-E P/ MICROREVESTIMENTO", FAMILIA_EMULSOES),
-        ("AQUISIÇÃO DE EMULSÃO ASFALTICA - RR-2C - TSD", FAMILIA_EMULSOES),
-        ("AQUISIÇÃO DE EAI PARA IMPRIMAÇÃO", FAMILIA_EMULSOES),
-        # Unrelated services must not be guessed into a family.
-        ("ESCAVAÇÃO, CARGA E TRANSPORTE DE MATERIAL", None),
-        ("DRENAGEM PROFUNDA", None),
-        ("", None),
-    ],
-)
-async def test_sugerir_familia(descricao, esperado):
-    assert catalogo.sugerir_familia(descricao) == esperado
+HEADER = {
+    "Contrato": "15 00716/2022 - HWN ENGENHARIA LTDA",
+    "Data Base": "01/01/2022",
+}
 
 
-async def test_codigos_semeados_estao_confirmados():
-    """The nine codes seen in the already-extracted results ship confirmed."""
-    confirmados = catalogo.codigos_confirmados()
-    assert confirmados["8300980"]["descricao_export"] == "AQUISIÇÃO DE CAP 50/70"
-    assert confirmados["8300980"]["familia"] == FAMILIA_CAP
-    # Several codes map onto the same product, with the export description.
-    assert (
-        confirmados["60112"]["produto_id"] == confirmados["92704"]["produto_id"]
+def _item(codigo, descricao, mes=1, valor=100.0, fonte="1ª MP.pdf"):
+    return {
+        "Serviço": codigo,
+        "Descrição": descricao,
+        "Valor a PI Líquido": valor,
+        "Fator": 0.1,
+        "Período Líquido": f"01/{mes:02d}/2023 - 28/{mes:02d}/2023",
+        "Source_File": fonte,
+    }
+
+
+async def test_codigos_semeados_estao_associados():
+    associados = catalogo.codigos_associados()
+    assert len(associados) == 9
+    assert associados["8300980"]["descricao_export"] == "AQUISIÇÃO DE CAP 50/70"
+    assert associados["60112"]["produto_id"] == associados["92704"]["produto_id"]
+    assert associados["29083"]["familia"] == FAMILIA_EMULSOES
+
+
+async def test_coluna_confirmado_nao_existe_mais():
+    with acquire_sync() as conn:
+        cur = conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'produto_codigo'"
+        )
+        colunas = {r["column_name"] for r in cur.fetchall()}
+    assert "confirmado" not in colunas
+
+
+async def test_codigo_desconhecido_nao_cria_nada():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    produtos_antes = len(catalogo.listar_produtos())
+    gravados = medicoes_repo.gravar_itens(
+        contrato_id, [_item("777123", "AQUISIÇÃO DE EMULSÃO RR-2C - TSD")]
     )
-    assert confirmados["29083"]["familia"] == FAMILIA_EMULSOES
-    assert len(confirmados) == 9
+    assert gravados == 1
+    assert catalogo.buscar_por_codigo("777123") is None
+    assert len(catalogo.listar_produtos()) == produtos_antes
+    assert medicoes_repo.itens_para_export(contrato_id) == []
 
 
-async def test_codigo_novo_gera_pendencia_com_familia_sugerida():
-    pendencia = catalogo.registrar_pendencia(
-        "777123", "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-2C - TSD"
-    )
-    assert pendencia["familia"] == FAMILIA_EMULSOES
-    assert pendencia["confirmado"] is False
-    assert "777123" in {p["codigo_servico"] for p in catalogo.listar_pendencias()}
-    # Excluded from the calculation until reviewed.
-    assert "777123" not in catalogo.codigos_confirmados()
+async def test_associacao_e_retroativa_e_desassociar_remove_do_calculo():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(contrato_id, [_item("777123", "RR-2C TSD")])
+
+    produto_id = catalogo.novo_produto("Aquisição de RR-2C", FAMILIA_EMULSOES)
+    catalogo.registrar_codigo("777123", produto_id)
+    itens = medicoes_repo.itens_para_export(contrato_id)
+    assert [i["codigo_servico"] for i in itens] == ["777123"]
+    assert itens[0]["descricao_export"] == "Aquisição de RR-2C"
+
+    assert catalogo.desassociar_codigo("777123") is True
+    assert medicoes_repo.itens_para_export(contrato_id) == []
+    assert catalogo.desassociar_codigo("777123") is False
 
 
-async def test_codigo_sem_familia_reconhecivel_nao_cria_produto():
-    assert catalogo.registrar_pendencia("777124", "DRENAGEM PROFUNDA") is None
-    assert catalogo.buscar_por_codigo("777124") is None
+async def test_associar_codigo_ainda_nao_extraido():
+    produto_id = catalogo.novo_produto("Aquisição de CAP 30/45", FAMILIA_CAP)
+    catalogo.registrar_codigo("999001", produto_id)
+    assert catalogo.buscar_por_codigo("999001")["produto_id"] == produto_id
 
 
-async def test_pendencia_nao_sobrescreve_codigo_confirmado():
-    """A confirmed mapping is the user's decision and must survive reprocessing."""
-    antes = catalogo.buscar_por_codigo("8300980")
-    catalogo.registrar_pendencia("8300980", "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C")
-    depois = catalogo.buscar_por_codigo("8300980")
-    assert depois["produto_id"] == antes["produto_id"]
-    assert depois["familia"] == FAMILIA_CAP
-    assert depois["confirmado"] is True
-    # The PDF description is still refreshed, for diagnosis.
-    assert depois["descricao_pdf"] == "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C"
-
-
-async def test_confirmar_codigo_o_traz_para_o_calculo():
-    catalogo.registrar_pendencia("777125", "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C")
-    assert "777125" not in catalogo.codigos_confirmados()
-    assert catalogo.confirmar_codigo("777125") is True
-    assert "777125" in catalogo.codigos_confirmados()
+async def test_associar_a_produto_inexistente_e_recusado():
+    with pytest.raises(catalogo.ErroCatalogo):
+        catalogo.registrar_codigo("999001", 987654)
 
 
 async def test_reapontar_codigo_para_outro_produto():
-    produtos = {p["descricao_export"]: p["id"] for p in catalogo.listar_produtos()}
-    destino = produtos["AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C"]
-    catalogo.registrar_codigo("8300980", destino)
-    assert catalogo.buscar_por_codigo("8300980")["produto_id"] == destino
+    novo = catalogo.novo_produto("Aquisição de CAP (outro)", FAMILIA_CAP)
+    catalogo.registrar_codigo("60112", novo)
+    assert catalogo.buscar_por_codigo("60112")["produto_id"] == novo
 
 
 async def test_criar_produto_recusa_familia_invalida():
     with pytest.raises(ValueError):
-        catalogo.criar_produto("AQUISIÇÃO DE BRITA", "BRITA")
+        catalogo.criar_produto("X", "ASFALTO")
+    with pytest.raises(catalogo.ErroCatalogo):
+        catalogo.novo_produto("X", "ASFALTO")
+
+
+async def test_descricao_vazia_e_recusada():
+    with pytest.raises(catalogo.ErroCatalogo):
+        catalogo.novo_produto("   ", FAMILIA_CAP)
+
+
+async def test_novo_produto_duplicado():
+    catalogo.novo_produto("Aquisição de CAP 50/70 (meu)", FAMILIA_CAP)
+    with pytest.raises(catalogo.ProdutoDuplicado):
+        catalogo.novo_produto("Aquisição de CAP 50/70 (meu)", FAMILIA_CAP)
+
+
+async def test_atualizar_produto():
+    produto_id = catalogo.novo_produto("Provisório", FAMILIA_CAP)
+    atualizado = catalogo.atualizar_produto(
+        produto_id, descricao_export="Definitivo", familia=FAMILIA_EMULSOES, ordem=7
+    )
+    assert atualizado["descricao_export"] == "Definitivo"
+    assert atualizado["familia"] == FAMILIA_EMULSOES
+    assert atualizado["ordem"] == 7
+    assert catalogo.atualizar_produto(987654, ordem=1) is None
+
+
+async def test_atualizar_para_descricao_existente_e_recusado():
+    produto_id = catalogo.novo_produto("Provisório", FAMILIA_CAP)
+    with pytest.raises(catalogo.ProdutoDuplicado) as erro:
+        catalogo.atualizar_produto(produto_id, descricao_export="AQUISIÇÃO DE CAP 50/70")
+    assert "AQUISIÇÃO DE CAP 50/70" in str(erro.value)
+
+
+async def test_excluir_produto_remove_as_associacoes():
+    produto_id = catalogo.novo_produto("Temporário", FAMILIA_CAP)
+    catalogo.registrar_codigo("999002", produto_id)
+    assert catalogo.excluir_produto(produto_id) is True
+    assert catalogo.buscar_por_codigo("999002") is None
+    assert catalogo.buscar_produto(produto_id) is None
+    assert catalogo.excluir_produto(produto_id) is False
+
+
+async def test_buscar_codigos_lista_extraidos_e_associados():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [
+            _item("60112", "AQUISIÇÃO DE CIMENTO ASFÁLTICO CAP 50/70", mes=1),
+            _item("60112", "AQUISIÇÃO DE CIMENTO ASFÁLTICO CAP 50/70", mes=2),
+            _item("54393", "ESCAVAÇÃO, CARGA E TRANSPORTE", mes=1),
+        ],
+    )
+    por_codigo = {c["codigo"]: c for c in catalogo.buscar_codigos()}
+
+    assert por_codigo["60112"]["ocorrencias"] == 2
+    assert por_codigo["60112"]["contratos"] == 1
+    assert por_codigo["60112"]["descricao_export"] == "AQUISIÇÃO DE CAP 50/70"
+    assert por_codigo["54393"]["produto_id"] is None
+    # Associado mas nunca extraído também aparece, com contagem zero.
+    assert por_codigo["133004"]["ocorrencias"] == 0
+    assert por_codigo["133004"]["descricao_pdf"] is None
+
+
+async def test_buscar_codigos_filtra_por_codigo_ou_descricao():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [_item("54393", "Escavação, carga e transporte"), _item("54394", "Drenagem")],
+    )
+    assert [c["codigo"] for c in catalogo.buscar_codigos("ESCAVA")] == ["54393"]
+    assert [c["codigo"] for c in catalogo.buscar_codigos("5439")] == ["54393", "54394"]
+    # Em branco = sem filtro.
+    assert len(catalogo.buscar_codigos("  ")) == len(catalogo.buscar_codigos())
+
+
+async def test_buscar_codigos_trata_curinga_como_texto():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [_item("54393", "Reajuste 100% pago"), _item("54394", "Reajuste 100 pago")],
+    )
+    assert [c["codigo"] for c in catalogo.buscar_codigos("100%")] == ["54393"]
+    assert catalogo.buscar_codigos("_") == []
+
+
+async def test_buscar_codigos_usa_a_descricao_mais_recente():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(contrato_id, [_item("54393", "DESCRICAO ANTIGA", mes=1)])
+    medicoes_repo.gravar_itens(contrato_id, [_item("54393", "DESCRICAO NOVA", mes=2)])
+    (codigo,) = catalogo.buscar_codigos("54393")
+    assert codigo["descricao_pdf"] == "DESCRICAO NOVA"
+
+
+async def test_buscar_codigos_filtra_associados():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(contrato_id, [_item("54393", "Escavação")])
+    livres = {c["codigo"] for c in catalogo.buscar_codigos(associado=False)}
+    associados = {c["codigo"] for c in catalogo.buscar_codigos(associado=True)}
+    assert livres == {"54393"}
+    assert len(associados) == 9

@@ -156,6 +156,7 @@ async def test_telas_renderizam_sem_dados():
     assert views.tela_administracao([], []) is not None
 
 
+@pytest.mark.skip(reason="Dash congelado até o subprojeto B")
 async def test_tela_de_pendencias_oferece_os_produtos_existentes():
     """Confirming a code means pointing it at a product — that is how several
     codes end up under one export description."""

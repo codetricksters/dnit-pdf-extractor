@@ -322,8 +322,8 @@ async def test_exportar_contrato_inexistente(template):
         reequilibrio_export.exportar("99 99999/9999", template)
 
 
-async def test_exportar_sem_itens_confirmados(template):
+async def test_exportar_sem_codigos_associados(template):
     contratos_repo.registrar_do_pdf(HEADER)
     with pytest.raises(ExportacaoImpossivel) as erro:
         reequilibrio_export.exportar("15 00716/2022", template)
-    assert "item" in str(erro.value).lower()
+    assert "associado" in str(erro.value)

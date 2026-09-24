@@ -309,8 +309,8 @@ def exportar(numero_contrato: str, template: bytes) -> Resultado:
     itens = medicoes_repo.itens_para_export(contrato["id"])
     if not itens:
         raise ExportacaoImpossivel(
-            "Nenhum item confirmado para este contrato. Confirme os códigos de "
-            "serviço pendentes ou processe as medições."
+            "Nenhum código de serviço deste contrato está associado a um produto. "
+            "Associe os códigos no catálogo ou processe as medições."
         )
 
     deltas, faltando = calcular_deltas(contrato, itens)
