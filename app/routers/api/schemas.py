@@ -186,3 +186,49 @@ class ResultadoImportacao(BaseModel):
     conflitos_manuais: list[ConflitoManual]
     manuais_preservados: int
     avisos: list[str]
+
+
+class LinhaCalculo(BaseModel):
+    """Uma linha da planilha, com as letras da linha 16 do template."""
+
+    mes: date
+    a: Decimal
+    fator: Decimal
+    b: Decimal
+    d: Decimal
+    c: Decimal
+    e: Decimal
+    f: Decimal
+
+
+class ProdutoCalculo(BaseModel):
+    descricao: str
+    subtotal: Decimal
+    linhas: list[LinhaCalculo]
+
+
+class FamiliaCalculo(BaseModel):
+    familia: Familia
+    rotulo: str
+    subtotal: Decimal
+    produtos: list[ProdutoCalculo]
+
+
+class ParametrosCalculo(BaseModel):
+    data_base: date
+    regioes: dict[str, str]
+    simulacao: bool
+    lucro: Decimal
+
+
+class ContratoRef(BaseModel):
+    id: int
+    numero: str
+
+
+class CalculoResposta(BaseModel):
+    contrato: ContratoRef
+    parametros: ParametrosCalculo
+    familias: list[FamiliaCalculo]
+    total: Decimal
+    avisos: list[str]
