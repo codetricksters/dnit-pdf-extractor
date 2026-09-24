@@ -133,7 +133,7 @@ def _painel(titulo: str, icone_nome: str, corpo, *, subtitulo: str = "",
                 className="panel-head",
             ),
             html.Div(corpo, className="panel-body flush" if flush else "panel-body"),
-            html.Div(rodape, className=f"panel-foot {rodape_classe}".strip()) if rodape else None,
+            html.Div(rodape, className=f"panel-foot {rodape_classe}".strip()) if rodape is not None else None,
         ],
         className="panel mt-lg",
     )

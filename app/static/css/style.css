@@ -733,6 +733,14 @@ textarea {
   font-size: 13px;
 }
 
+.input,
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+  height: 34px;
+}
+
 .input:focus,
 input:focus,
 select:focus,
@@ -850,8 +858,7 @@ tr.status-failed td { background: rgba(147, 0, 10, 0.18); }
 
 #dash-app-content { background: var(--surface-base); }
 
-.dash-dropdown .Select-control,
-.Select-control {
+.dash-dropdown {
   background: var(--surface-container-high) !important;
   border: 1px solid var(--outline-variant) !important;
   border-radius: var(--radius-lg) !important;
@@ -859,35 +866,67 @@ tr.status-failed td { background: rgba(147, 0, 10, 0.18); }
   min-height: 34px;
 }
 
-.Select-placeholder,
-.Select--single > .Select-control .Select-value .Select-value-label,
-.Select-value-label { color: var(--text-primary) !important; }
+.dash-dropdown-value,
+.dash-dropdown-value-item,
+.dash-dropdown-value-count { color: var(--text-primary) !important; }
+.dash-dropdown-placeholder { color: var(--text-secondary) !important; }
 
-.Select-menu-outer {
+.dash-dropdown-trigger-icon,
+.dash-dropdown-search-icon,
+.dash-dropdown-clear { color: var(--text-secondary) !important; }
+
+.dash-dropdown-content {
   background: var(--surface-container-high) !important;
   border: 1px solid var(--outline-variant) !important;
   color: var(--text-primary) !important;
 }
 
-.Select-option { background: var(--surface-container-high) !important; color: var(--text-primary) !important; }
-.Select-option.is-focused { background: var(--surface-container-highest) !important; }
-
-.SingleDatePickerInput,
-.DateInput,
-.DateInput_input {
-  background: var(--surface-container-high) !important;
+.dash-dropdown-search {
+  background: transparent !important;
   color: var(--text-primary) !important;
+}
+.dash-dropdown-search::placeholder { color: var(--text-secondary) !important; }
+
+.dash-dropdown-option { color: var(--text-primary) !important; background: transparent !important; }
+.dash-dropdown-option:hover,
+.dash-dropdown-option[aria-selected="true"] { background: var(--surface-container-highest) !important; }
+
+.dash-datepicker-input-wrapper {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 var(--space-sm) !important;
+  display: flex !important;
+  align-items: center;
+  gap: var(--space-xs);
+  box-sizing: border-box !important;
+  background: var(--surface-container-high) !important;
   border-color: var(--outline-variant) !important;
+  border-radius: var(--radius-lg) !important;
+}
+
+.dash-datepicker-input {
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--text-primary) !important;
   font-family: var(--font-data);
   font-size: 13px;
 }
+.dash-datepicker-input::placeholder { color: var(--text-secondary) !important; }
+
+.dash-datepicker-caret-icon,
+.dash-datepicker-clear { color: var(--text-secondary) !important; }
 
 .dash-spreadsheet-container .dash-spreadsheet-inner td,
 .dash-spreadsheet-container .dash-spreadsheet-inner th { border-color: rgba(69, 70, 77, 0.35) !important; }
 
 .form-control, .form-select {
+  height: 34px;
+  padding: 8px var(--space-sm);
   background: var(--surface-container-high);
   border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-family: var(--font-data);
   font-size: 13px;

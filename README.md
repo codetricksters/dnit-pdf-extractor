@@ -194,6 +194,8 @@ para o cliente correspondente ao servidor.
 
 ```
 main.py            Ponto de entrada (main:app)
+setup.sh           Preparação do ambiente de desenvolvimento (.env, Postgres,
+                   banco de testes, uv sync e seed dos índices)
 migrations/        Migrações SQL numeradas, aplicadas na subida
 scripts/           Carga inicial dos índices, geração das fixtures do teste
                    ponta a ponta e reconstrução do template
