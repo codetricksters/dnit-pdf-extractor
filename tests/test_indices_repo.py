@@ -14,6 +14,8 @@ from app.services.delta_p import (
 )
 from app.services import indices_repo
 
+from .indices_factory import mes_igp, semana
+
 # Real weeks from the reference workbook (Nordeste), each containing the 15th of
 # its month, plus the neighbouring weeks that must NOT be selected.
 SEMANAS = [
@@ -156,3 +158,157 @@ async def test_cobertura_relata_o_que_existe():
     assert c["anp"]["registros"] == len(SEMANAS)
     assert c["regioes"] == ["Nordeste"]
     assert c["igp_di"]["registros"] == 3
+
+
+async def test_gravacao_registra_origem_e_so_regrava_o_que_mudou():
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28568")], origem="upload:a.xls")
+    (antes,) = indices_repo.listar_precos_anp(regiao="Nordeste")
+    assert antes["origem"] == "upload:a.xls"
+
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.285680")], origem="upload:b.xls")
+    (igual,) = indices_repo.listar_precos_anp(regiao="Nordeste")
+    assert igual["origem"] == "upload:a.xls"
+    assert igual["atualizado_em"] == antes["atualizado_em"]
+
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.3")], origem="upload:b.xls")
+    (mudou,) = indices_repo.listar_precos_anp(regiao="Nordeste")
+    assert mudou["origem"] == "upload:b.xls"
+    assert mudou["preco"] == Decimal("3.3")
+
+
+async def test_origem_padrao_e_manual():
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28568")])
+    indices_repo.gravar_indices_mensais([mes_igp(date(2023, 1, 1), "1143.861")])
+    assert indices_repo.listar_precos_anp()[0]["origem"] == indices_repo.ORIGEM_MANUAL
+    assert indices_repo.listar_indices_mensais()[0]["origem"] == indices_repo.ORIGEM_MANUAL
+
+
+async def test_indice_mensal_so_regrava_o_que_mudou():
+    indices_repo.gravar_indices_mensais([mes_igp(date(2023, 1, 1), "1143.861")], origem="seed")
+    indices_repo.gravar_indices_mensais([mes_igp(date(2023, 1, 1), "1143.8610")], origem="upload:x")
+    assert indices_repo.buscar_indice(date(2023, 1, 1))["origem"] == "seed"
+
+
+async def test_banco_proibe_semanas_sobrepostas():
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28")])
+    with pytest.raises(indices_repo.SemanaSobreposta):
+        indices_repo.gravar_precos_anp([semana(date(2023, 1, 15), "3.30")])
+    # Outra região não conflita.
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 15), "3.30", regiao="Sul")])
+
+
+async def test_vigencia_invertida_e_recusada_pelo_banco():
+    with pytest.raises(indices_repo.IndiceInvalido):
+        indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28", dias=-1)])
+
+
+async def test_semana_manual_normaliza_regiao_e_marca_manual():
+    salvo = indices_repo.gravar_semana_manual(
+        {
+            "vigencia_inicio": date(2023, 1, 9),
+            "vigencia_fim": date(2023, 1, 15),
+            "regiao": "NORDESTE",
+            "preco": Decimal("3.28568"),
+        }
+    )
+    assert salvo["regiao"] == "Nordeste"
+    assert salvo["produto"] == ANP_PRODUTO_CAP
+    assert salvo["origem"] == indices_repo.ORIGEM_MANUAL
+    assert salvo["preco"] == Decimal("3.28568")
+
+
+async def test_semana_manual_corrige_a_mesma_semana():
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28")], origem="seed")
+    salvo = indices_repo.gravar_semana_manual(
+        {"vigencia_inicio": date(2023, 1, 9), "vigencia_fim": date(2023, 1, 15),
+         "regiao": "Nordeste", "preco": "3.5"}
+    )
+    assert salvo["preco"] == Decimal("3.5")
+    assert salvo["origem"] == indices_repo.ORIGEM_MANUAL
+
+
+async def test_semana_manual_sobreposta_indica_a_semana_em_conflito():
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28")])
+    with pytest.raises(indices_repo.SemanaSobreposta) as erro:
+        indices_repo.gravar_semana_manual(
+            {"vigencia_inicio": date(2023, 1, 12), "vigencia_fim": date(2023, 1, 18),
+             "regiao": "Nordeste", "preco": "3.3"}
+        )
+    assert "09/01/2023" in str(erro.value)
+    assert "15/01/2023" in str(erro.value)
+
+
+@pytest.mark.parametrize(
+    "alteracao",
+    [
+        {"vigencia_fim": date(2023, 1, 8)},
+        {"preco": "-1"},
+        {"regiao": "Marte"},
+    ],
+)
+async def test_semana_manual_invalida(alteracao):
+    registro = {"vigencia_inicio": date(2023, 1, 9), "vigencia_fim": date(2023, 1, 15),
+                "regiao": "Nordeste", "preco": "3.28"}
+    with pytest.raises(indices_repo.IndiceInvalido):
+        indices_repo.gravar_semana_manual({**registro, **alteracao})
+
+
+async def test_semana_sem_cotacao_pode_ser_gravada():
+    salvo = indices_repo.gravar_semana_manual(
+        {"vigencia_inicio": date(2023, 1, 9), "vigencia_fim": date(2023, 1, 15),
+         "regiao": "Centro-Oeste", "preco": None}
+    )
+    assert salvo["preco"] is None
+
+
+async def test_indice_manual():
+    salvo = indices_repo.gravar_indice_manual(date(2023, 1, 1), Decimal("1143.861"))
+    assert salvo["origem"] == indices_repo.ORIGEM_MANUAL
+    assert salvo["base_label"] == "ago/1994 = 100"
+    assert salvo["mes_ref"] == date(2023, 1, 1)
+    with pytest.raises(indices_repo.IndiceInvalido):
+        indices_repo.gravar_indice_manual(date(2023, 2, 1), 0)
+
+
+async def test_excluir_semana_e_mes():
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.28")])
+    (linha,) = indices_repo.listar_precos_anp()
+    assert indices_repo.excluir_preco_anp(linha["id"]) is True
+    assert indices_repo.excluir_preco_anp(linha["id"]) is False
+
+    indices_repo.gravar_indice_manual(date(2023, 1, 1), 1)
+    assert indices_repo.excluir_indice_mensal(date(2023, 1, 1)) is True
+    assert indices_repo.excluir_indice_mensal(date(2023, 1, 1)) is False
+
+
+async def test_listar_precos_filtra_periodo_e_regiao_sem_diferenciar_maiusculas():
+    _semear_anp()
+    linhas = indices_repo.listar_precos_anp(
+        regiao="nordeste", de=date(2022, 12, 1), ate=date(2023, 1, 31)
+    )
+    assert [l["vigencia_inicio"] for l in linhas] == [date(2023, 1, 9), date(2022, 12, 12)]
+    assert len(indices_repo.listar_precos_anp(limite=None)) == len(SEMANAS)
+
+
+async def test_listar_indices_filtra_periodo():
+    _semear_igp()
+    meses = indices_repo.listar_indices_mensais(de=date(2023, 1, 1), ate=date(2023, 12, 1))
+    assert [m["mes_ref"] for m in meses] == [date(2023, 2, 1), date(2023, 1, 1)]
+
+
+async def test_regioes_disponiveis_e_normalizacao():
+    _semear_anp("Nordeste")
+    assert indices_repo.regioes_disponiveis() == ["Nordeste"]
+    assert indices_repo.normalizar_regiao("  NORDESTE ") == "Nordeste"
+    assert indices_repo.normalizar_regiao("Sul") is None
+    assert indices_repo.normalizar_regiao("") is None
+
+
+async def test_mapas_por_chave():
+    _semear_anp()
+    _semear_igp()
+    precos = indices_repo.precos_anp_por_chave({ANP_PRODUTO_CAP})
+    chave = (ANP_PRODUTO_CAP, date(2021, 12, 13), "Nordeste")
+    assert precos[chave]["preco"] == Decimal("4.02073")
+    assert precos[chave]["origem"] == indices_repo.ORIGEM_MANUAL
+    assert indices_repo.indices_por_mes()[date(2022, 1, 1)]["valor"] == Decimal("1110.398")

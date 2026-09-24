@@ -48,6 +48,9 @@ FAMILIAS = (FAMILIA_CAP, FAMILIA_EMULSOES)
 ANP_PRODUTO_CAP = "Cimento Asfáltico de Petróleo 50 70 (R$/kg)"
 INDICE_IGP_DI = "IGP - DI"
 
+# Base do número-índice publicado pela FGV; gravada em indice_mensal.base_label.
+BASE_IGP_DI = "ago/1994 = 100"
+
 PESO_ANP = Decimal("0.75")
 PESO_IGP = Decimal("0.25")
 
