@@ -22,10 +22,12 @@ psycopg[binary,pool]
 dash
 dash-bootstrap-components
 a2wsgi
+xlrd
 ```
 
 `psycopg[binary,pool]` is the only database driver — plain SQL, no ORM, no
 alembic. `a2wsgi` mounts the synchronous Dash app inside the async FastAPI app.
+`xlrd` reads the ANP's legacy `.xls` in the importer.
 
 ## System Dependencies
 
@@ -77,21 +79,28 @@ Migrations are numbered SQL files in `migrations/`, applied in order by
 `schema_migrations`. Nothing to run by hand: starting the app brings the schema
 up to date.
 
+Migration 006 runs `CREATE EXTENSION IF NOT EXISTS btree_gist` (shipped with the
+`postgres:16` image); the database user must be allowed to create extensions —
+the Compose user is.
+
 The packaged Excel template is seeded into the `template` table on first start
 (`template_repo.garantir_semente`), only when the table is empty.
 
 ### Initial data load
 
-The índices are user-maintained, but the historical series comes from a one-off
-script:
+The índices are user-maintained; the seed is a command-line shell over the same
+importers the API uses, writing `origem = 'seed'` and preserving manual edits:
 
 ```bash
-uv run python scripts/seed_indices.py                   # only the CAP 50/70 series
-uv run python scripts/seed_indices.py --todos-produtos  # all 29 ANP products
+uv run python scripts/seed_indices.py --anp tests/fixtures/anp_semanal.xls   # ANP (all products)
+uv run python scripts/seed_indices.py --sem-anp --igp-di <template preenchido>
 ```
 
-Only CAP 50/70 feeds the ΔP, hence the default. The script applies the migrations
-itself, so it can run before the app's first start.
+Without `--anp` it reads `data/precos-medios-ponderados-semanais-2013.xls`. The
+script applies the migrations itself, so it can run before the app's first start.
+It never reads the reference spreadsheet `Reequilíbrio - 26 - Contrato
+716-22.xlsx`; only `scripts/gerar_fixtures_e2e.py` does, to build the test
+fixtures.
 
 ## Running Locally
 
@@ -120,6 +129,9 @@ them against a PG 16 server with a newer client installed:
 ```bash
 PG_BIN=/usr/lib/postgresql/16/bin uv run pytest -q
 ```
+
+`tests/test_e2e_reequilibrio.py` imports the full official ANP file and takes a
+few seconds; it reads only the versioned `tests/fixtures/`.
 
 ## Running in Production
 

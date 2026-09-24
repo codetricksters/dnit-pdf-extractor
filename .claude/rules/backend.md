@@ -71,7 +71,15 @@ query.
 - `registrar_do_pdf(header)` inserts the PDF-derived fields **once** and never
   overwrites what the user has since edited.
 - `salvar_cadastro(numero, dados)` stores the user's fields (Edital, Rodovia,
-  Trecho, Subtrecho, Segmento, Extensão, Contratada).
+  Trecho, Subtrecho, Segmento, Extensão, Contratada); `atualizar(contrato_id,
+  dados, regioes)` is the same write keyed by `id`, and also accepts `data_base`
+  — the API's `PATCH /contratos/{id}` exposes it, so a wrong Data Base the PDF
+  suggested can be corrected. Both validate everything before opening the
+  transaction, so a bad field never leaves half the form written; refusals raise
+  `CadastroInvalido`.
+- `buscar_por_id(contrato_id)` / `buscar(numero)` — the same row, by `id` or by
+  number; `listar(numero=None)` lists every contract with its item/measurement
+  counts, `numero` filtering with `ILIKE`.
 - `definir_regiao(numero, familia, regiao)` — one ANP region **per family**; CAP
   and EMULSOES are independent.
 - `campos_faltantes(contrato)` drives the export's warnings.
@@ -81,29 +89,55 @@ query.
 `gravar_itens(contrato_id, rows, job_id=None)` is idempotent through
 `UNIQUE (contrato_id, codigo_servico, mes_medicao, source_file)` plus
 `ON CONFLICT … DO UPDATE`, so reprocessing the same PDF does not duplicate rows.
-`itens_para_export` returns the rows joined to the catalogue.
+`itens_para_export` returns the rows joined to the catalogue — only associated
+codes. `gravar_itens` returns the number of items stored.
 
 ### catalogo.py
 
 The **service code** is the key, not the description: a code maps to exactly one
-material, and OCR corrupts descriptions but not codes. Several codes point at one
-`produto` with a custom `descricao_export`.
+material, and OCR corrupts descriptions but not codes. Products are created by the
+user (free `descricao_export` + family `CAP`/`EMULSOES`); several codes can point
+at one product.
 
-- `sugerir_familia(descricao)` — `CAP` → CAP; `EMULSÃO`/`RR-`/`RC-`/`EAI`/`IMPRIMAÇÃO` → EMULSOES.
-- `registrar_pendencia(codigo, descricao_pdf)` records an unknown code with
-  `confirmado = false`. **Unconfirmed codes stay out of the calculation** — a new
-  material classified wrongly must not contaminate the result silently.
-- `registrar_codigo(codigo, produto_id, *, descricao_pdf=…, confirmado=…)` is how
-  the dashboard resolves a pendência.
+- A row in `produto_codigo` **is** the association. A code without one is simply
+  out of the calculation — not a pendência, no warning, nothing blocked.
+- `criar_produto`/`atualizar_produto`/`excluir_produto` (deleting cascades the
+  associations); duplicates raise `ProdutoDuplicado`, other refusals `ErroCatalogo`.
+- `registrar_codigo(codigo, produto_id)` associates or re-points a code, even one
+  not yet extracted; `desassociar_codigo(codigo)` removes it. Associations are
+  retroactive: `medicao_item` keeps every extracted item.
+- `buscar_codigos(q, associado, limite)` — distinct extracted codes, `q` filtering
+  code **or** description with `ILIKE '%q%'`.
 
 ### indices_repo.py
 
-`gravar_precos_anp` / `gravar_indices_mensais` upsert the user-supplied series;
+`gravar_precos_anp` / `gravar_indices_mensais` upsert with an `origem`
+(`'manual'`, `'upload:<arquivo>'`, `'seed'`) and rewrite a row only when the value
+changed (`IS DISTINCT FROM`), stamping `atualizado_em`. `gravar_semana_manual` /
+`gravar_indice_manual` are the single-value edits (`origem = 'manual'`).
+
+Weeks of the same product and region **must not overlap**: the importer reports
+it per line, and `EXCLUDE USING gist (… daterange(vigencia_inicio, vigencia_fim,
+'[]') WITH &&)` (migration 006, `btree_gist`) is the final guarantee, surfaced as
+`SemanaSobreposta`. Regions are compared case-insensitively
+(`normalizar_regiao`) and stored in the ANP file's spelling.
+
 `buscar_preco_anp(produto, regiao, mes)` resolves a month to the weekly row whose
 vigência contains **day 15** (`_dia_de_referencia`); `cobertura()` returns
-`{"anp": {de, ate, registros}, "igp_di": {…}, "regioes": [...]}` for the Índices
-screen. `FonteBanco` caches per instance — one export asks for the same base
-month on every line.
+`{"anp": {de, ate, registros}, "igp_di": {…}, "regioes": [...]}`. `FonteBanco`
+caches per instance — one export asks for the same base month on every line.
+
+### importadores.py / importacao.py / exportadores.py
+
+`importadores` is pure (bytes in, validated rows or `ArquivoInvalido` with
+per-line `erros` out): the ANP's standard `.xls` (read with `xlrd`, layout checked
+first, `***` → NULL, 5 decimal places; a product with repeated weeks — only GLP
+in the official file — is skipped with a warning) and the IGP-DI template it also
+generates. `importacao` compares with the database: **all or nothing**,
+`simular=True` writes nothing, and `origem = 'manual'` rows are preserved unless
+`sobrescrever_manuais=True`. The API, the seed and the tests share this path.
+`exportadores` writes both series as CSV or XLSX; the IGP-DI XLSX is the template,
+so it can be re-imported unchanged.
 
 ## delta_p.py — ΔP
 
@@ -125,7 +159,8 @@ component inside `ΔP_emul` uses the **EMULSOES** family's region, so the two
 families can produce different `ΔP_cap` for the same month.
 
 A missing price or index raises `IndiceIndisponivel` — never zero, never a skipped
-line. The export refuses; the dashboard surfaces it as a pendência.
+line. The export refuses, and the API answers 422 with every missing índice in
+`faltando`.
 
 ## reequilibrio_export.py — The Spreadsheet
 
@@ -135,6 +170,16 @@ per product and a grand total) and writes into the template. Refuses with
 `ExportacaoImpossivel` when the contract is unknown or a ΔP cannot be computed —
 a spreadsheet without ΔP would look finished. `Resultado.avisos` carries the
 non-fatal gaps (e.g. unregistered contract fields).
+
+`calcular(contrato, regioes_override)` is the single calculation behind both the
+JSON (`serializar`, columns `a`–`f` of row 16) and the file (`gerar`). An override
+changes a family's region for that generation only — never the registration — and
+is reported in `avisos` and in the filename (`…_SIMULACAO_CAP-Sul.xlsx`).
+`ExportacaoImpossivel` carries a structured `faltando` list: field codes
+(`data_base`, `regiao_<familia>`) and prose strings for missing índices, all
+collected at once rather than stopping at the first — `regioes_efetivas` checks
+every família in an override before raising, and `calcular`/`_deltas` walk every
+(família, mês) the export needs.
 
 ### Live formulas
 
@@ -222,6 +267,15 @@ work goes through `asyncio.to_thread`; service exceptions become
 `GET /reequilibrio/planilha?contrato=…` — a query parameter because contract
 numbers contain a slash and a space (`15 00716/2022`). Returns the `.xlsx` with a
 `Content-Disposition` filename and an `X-Avisos` header joining `Resultado.avisos`.
+
+### api/ — `/api/v1`
+
+Thin routers over the synchronous services (`asyncio.to_thread`), Pydantic
+schemas in `schemas.py` (Decimal serialised as string). `ErroApi(status, detail,
+**extra)` and its handler produce `{"detail": …}` plus fields such as `faltando`
+or `erros`. Contracts are addressed by numeric `id`; `GET /contratos?numero=`
+finds one by number. Index uploads are capped at 20 MB (413). The `X-Avisos`
+header (`calculo.py`) is sanitised to latin-1, since HTTP headers only accept it.
 
 ## Dashboard
 

@@ -11,9 +11,11 @@ migrations/                    # Numbered SQL migrations, applied in order at st
 ├── 002_indices.sql            # anp_preco_semanal, indice_mensal
 ├── 003_catalogo.sql           # produto, produto_codigo
 ├── 004_contrato.sql           # contrato, contrato_familia_regiao, medicao_item
-└── 005_template.sql           # template (xlsx blobs)
+├── 005_template.sql           # template (xlsx blobs)
+└── 006_catalogo_indices.sql   # drops confirmado; origem/atualizado_em; btree_gist + no-overlap constraint
 scripts/
-├── seed_indices.py            # One-off initial load of ANP prices and monthly índices
+├── seed_indices.py            # Initial load through the importers (--anp, --igp-di)
+├── gerar_fixtures_e2e.py      # One-off: builds tests/fixtures/ from the reference spreadsheet
 └── build_template.py          # Rebuilds app/templates_xlsx/reequilibrio_template.xlsx
 app/
 ├── __init__.py
@@ -30,7 +32,8 @@ app/
 │   ├── upload.py              # GET / and POST /upload (starts an async job)
 │   ├── jobs.py                # Job status, SSE stream, result downloads, retry
 │   ├── admin.py               # Template and backup management (/admin)
-│   └── reequilibrio.py        # GET /reequilibrio/planilha — the .xlsx export
+│   ├── reequilibrio.py        # GET /reequilibrio/planilha — the .xlsx export
+│   └── api/                   # REST API /api/v1: contratos, catalogo, indices, calculo, schemas, erros
 ├── services/
 │   ├── extractor.py           # Text-PDF parsing (pdfplumber)
 │   ├── ocr_extractor.py       # Scanned-PDF parsing
@@ -39,7 +42,10 @@ app/
 │   ├── storage.py             # Upload and result files under STORAGE_PATH
 │   ├── job_manager.py         # Job state in Postgres + SSE pub/sub
 │   ├── indices_repo.py        # ANP weekly prices and monthly índices
-│   ├── catalogo.py            # Products, service codes, family suggestion, pendências
+│   ├── importadores.py        # Pure readers: ANP .xls, IGP-DI template (and its generator)
+│   ├── importacao.py          # Preview/write against the database, manual values preserved
+│   ├── exportadores.py        # CSV/XLSX of both índice series
+│   ├── catalogo.py            # Products, service-code associations, code search
 │   ├── contratos_repo.py      # Contract: PDF fields + user registration, region per family
 │   ├── medicoes_repo.py       # Idempotent persistence of measurement items
 │   ├── progresso.py           # The six-step trail and the counters shown in the shell
@@ -92,6 +98,7 @@ one worker acts: `LOCK_CLEANUP = 8474001` (stale jobs), `LOCK_BACKUP = 8474002`
 | `GET/POST /admin/templates…` | `admin` | Upload, download, activate, delete |
 | `GET/POST /admin/backups…` | `admin` | Generate, list, download, upload, restore, delete |
 | `GET /reequilibrio/planilha` | `reequilibrio.baixar_planilha` | `?contrato=15 00716/2022` → `.xlsx` |
+| `/api/v1/…` | `routers/api` | Contratos, catálogo, índices, cálculo e planilha; OpenAPI em `/docs` |
 | `GET /static/*` | `StaticFiles` | Mounted in `app/main.py` |
 | `/dashboard` | Dash app | Mounted WSGI app |
 
