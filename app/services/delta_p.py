@@ -116,6 +116,51 @@ def _indice(fonte: FonteIndices, mes: date, rotulo: str) -> Decimal:
     return valor
 
 
+def _requisitos(familia: str, mes_medicao: date, data_base: date):
+    """(mes, rótulo) que a família precisa consultar, por fonte.
+
+    Devolve ``(precos, indices)``: os preços ANP valem para as duas famílias
+    (base e mês da medição); o IGP-DI só entra na fórmula das emulsões.
+    """
+    precos = [
+        (soma_meses(data_base, -1), "data base"),
+        (soma_meses(mes_medicao, -1), "mês da medição"),
+    ]
+    indices = (
+        [(data_base, "data base"), (mes_medicao, "mês da medição")]
+        if familia == FAMILIA_EMULSOES
+        else []
+    )
+    return precos, indices
+
+
+def faltantes(
+    familia: str, *, mes_medicao: date, data_base: date, regiao: str, fonte: FonteIndices
+) -> list[str]:
+    """Every price/índice this família and month need that is missing or zero.
+
+    Does not raise: it exists to collect every problem at once — a caller
+    checks every família/mês before deciding whether ``delta_p`` can be
+    called, instead of learning about one missing value at a time. A NULL
+    quotation on the reference day counts as missing; there is no fallback.
+    """
+    if familia not in FAMILIAS:
+        raise ValueError(f"Família desconhecida: {familia!r}")
+    precos, indices = _requisitos(familia, mes_medicao, data_base)
+    mensagens: list[str] = []
+    for mes, rotulo in precos:
+        try:
+            _preco(fonte, regiao, mes, rotulo)
+        except IndiceIndisponivel as e:
+            mensagens.append(str(e))
+    for mes, rotulo in indices:
+        try:
+            _indice(fonte, mes, rotulo)
+        except IndiceIndisponivel as e:
+            mensagens.append(str(e))
+    return mensagens
+
+
 def delta_p_cap(
     *, mes_medicao: date, data_base: date, regiao: str, fonte: FonteIndices
 ) -> Decimal:

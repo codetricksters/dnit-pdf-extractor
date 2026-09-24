@@ -296,7 +296,9 @@ async def test_indice_faltante_e_relatado_uma_vez_por_motivo():
     """One missing value is one thing to fix, not one per measurement.
 
     The ΔP base month is shared by every line, so an absent base índice used to
-    produce an identical bullet for each of the 52 items.
+    produce an identical bullet for each of the 52 items. Every measurement
+    month's own ANP price is imported here, to isolate exactly that case —
+    the base is the only thing missing.
     """
     contrato_id = await _contrato_com_medicoes()
     medicoes_repo.gravar_itens(
@@ -313,6 +315,11 @@ async def test_indice_faltante_e_relatado_uma_vez_por_motivo():
             for m in range(3, 8)
         ],
     )
+    # O preço ANP do mês corrente de cada medição está disponível; só a base
+    # (dez/2021) falta.
+    indices_repo.gravar_precos_anp(
+        [semana(date(2023, mes, 9), "4.0", regiao="Nordeste") for mes in range(1, 7)]
+    )
     contrato = contratos_repo.buscar("15 00716/2022")
     itens = medicoes_repo.itens_para_export(contrato_id)
 
@@ -320,6 +327,56 @@ async def test_indice_faltante_e_relatado_uma_vez_por_motivo():
 
     assert len(itens) > len(faltando)
     assert len(faltando) == len(set(faltando))
+    assert len(faltando) == 1
+    assert "12/2021" in faltando[0]
+
+
+async def test_todos_os_indices_ausentes_aparecem_em_faltando():
+    """A fix must surface every missing value, not just the first found.
+
+    ``delta_p_cap`` looks up the base price before the current price, and the
+    emulsion formula's IGP-DI component only runs after the CAP component —
+    so a naive "catch the first ``IndiceIndisponivel``" hides everything past
+    the first check. Here the base ANP price, the current ANP price and one of
+    the two IGP-DI months are all missing at once; only the other IGP-DI month
+    is imported.
+    """
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)  # Data Base 01/01/2022
+    contratos_repo.definir_regiao("15 00716/2022", FAMILIA_EMULSOES, "Nordeste")
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [
+            {
+                "Serviço": "29083",
+                "Descrição": "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C",
+                "Valor a PI Líquido": 100.0,
+                "Fator": -0.1,
+                "Período Líquido": "01/03/2023 - 31/03/2023",
+                "Source_File": "1.pdf",
+            }
+        ],
+    )
+    # Só o IGP-DI do mês da medição (03/2023) está importado.
+    indices_repo.gravar_indices_mensais([mes_igp(date(2023, 3, 1), "1000")])
+
+    contrato = contratos_repo.buscar("15 00716/2022")
+    itens = medicoes_repo.itens_para_export(contrato_id)
+    _, faltando = reequilibrio_export.calcular_deltas(contrato, itens)
+
+    assert len(faltando) == 3
+    assert any("12/2021" in f and "data base" in f for f in faltando)  # ANP base
+    assert any("02/2023" in f and "mês da medição" in f for f in faltando)  # ANP m-1
+    assert any("01/2022" in f and "data base" in f for f in faltando)  # IGP-DI base
+    assert not any("03/2023" in f for f in faltando)  # esse já foi importado
+
+
+async def test_override_duas_regioes_invalidas_lista_ambas():
+    """Every bad override família is reported, not just the first."""
+    with pytest.raises(ExportacaoImpossivel) as erro:
+        regioes_efetivas({"regioes": {}}, {"CAP": "Marte", "EMULSOES": "Netuno"})
+    assert set(erro.value.faltando) == {"regiao_cap", "regiao_emulsoes"}
+    for token in erro.value.faltando:
+        assert token in erro.value.mensagem
 
 
 async def test_exportar_contrato_inexistente(template):

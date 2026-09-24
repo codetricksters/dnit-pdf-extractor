@@ -27,6 +27,7 @@ import openpyxl
 from . import contratos_repo, indices_repo, medicoes_repo, xlsx_drawings
 from .catalogo import ROTULOS_FAMILIA
 from .delta_p import FAMILIAS, IndiceIndisponivel, delta_p
+from .delta_p import faltantes as delta_p_faltantes
 from .indices_repo import FonteBanco
 from .reequilibrio_layout import (
     ABA,
@@ -277,68 +278,105 @@ def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
     )
 
 
-def _anotar(faltando: list[str], aviso: str) -> None:
-    """Record a missing-índice message once, keeping the order of discovery.
+def _acrescentar(faltando: list[str], mensagens: list[str], token: str, texto: str) -> None:
+    """Record one missing thing once, keeping the order of discovery.
 
-    The base month is the same on every line, so a single missing IGP-DI value
-    would otherwise be reported once per item — 52 identical bullets on screen
-    for one thing to fix.
+    ``token`` is what the caller acts on to fix the problem — a code such as
+    ``regiao_cap`` or, for a missing índice, the índice's own message; ``texto``
+    is what gets shown, and always contains ``token`` literally, so joining
+    every ``texto`` into one message is guaranteed to mention every ``token``.
     """
-    if aviso not in faltando:
-        faltando.append(aviso)
+    if token in faltando:
+        return
+    faltando.append(token)
+    mensagens.append(texto)
 
 
 def regioes_efetivas(contrato: dict, override: dict | None = None) -> tuple[dict, dict]:
     """The regions this generation uses: the registered ones, replaced by
     *override* for this export only (a simulation). Returns ``(efetivas,
-    simuladas)``; ``simuladas`` holds only families whose region changed."""
+    simuladas)``; ``simuladas`` holds only families whose region changed.
+
+    Every bad família in *override* is checked before raising, so the caller
+    learns about all of them at once instead of one attempt at a time.
+    """
     cadastro = dict(contrato.get("regioes") or {})
     efetivas = dict(cadastro)
     simuladas: dict[str, str] = {}
+    faltando: list[str] = []
+    mensagens: list[str] = []
+
     for familia, regiao in (override or {}).items():
         if not regiao:
             continue
-        campo = f"regiao_{familia.lower()}"
         if familia not in FAMILIAS:
-            raise ExportacaoImpossivel(f"Família desconhecida: {familia!r}.", [campo])
+            texto = f"Família desconhecida: {familia!r}."
+            _acrescentar(faltando, mensagens, texto, texto)
+            continue
+        campo = f"regiao_{familia.lower()}"
         grafia = indices_repo.normalizar_regiao(regiao)
         if grafia is None:
-            raise ExportacaoImpossivel(
-                f"Região {regiao!r} sem preços ANP do CAP 50/70; escolha uma das "
-                "regiões importadas.",
-                [campo],
+            texto = (
+                f"{campo}: região {regiao!r} sem preços ANP do CAP 50/70; escolha "
+                "uma das regiões importadas."
             )
+            _acrescentar(faltando, mensagens, campo, texto)
+            continue
         efetivas[familia] = grafia
         if grafia != cadastro.get(familia):
             simuladas[familia] = grafia
+
+    if faltando:
+        raise ExportacaoImpossivel(
+            "Não é possível simular a região informada:\n- " + "\n- ".join(mensagens),
+            faltando,
+        )
     return efetivas, simuladas
 
 
-def _deltas(contrato: dict, itens: list[dict], regioes: dict) -> tuple[dict, list[str]]:
+def _deltas(
+    contrato: dict, itens: list[dict], regioes: dict
+) -> tuple[dict, list[str], list[str]]:
+    """ΔP por (família, mês), com todo problema — não só o primeiro.
+
+    Cada (família, mês) só é examinado uma vez: a região e a Data Base são as
+    mesmas para todo item daquela chave, então o resultado seria idêntico.
+    """
     fonte = FonteBanco()
     deltas: dict[tuple[str, date], Decimal] = {}
     faltando: list[str] = []
+    mensagens: list[str] = []
+    processados: set[tuple[str, date]] = set()
 
     for item in itens:
         chave = (item["familia"], item["mes_medicao"])
-        if chave in deltas:
+        if chave in processados:
             continue
-        regiao = regioes.get(item["familia"])
-        if not regiao:
-            _anotar(faltando, f"Escolha a região da ANP para a família {item['familia']}.")
-            continue
-        try:
-            deltas[chave] = delta_p(
-                item["familia"],
-                mes_medicao=item["mes_medicao"],
-                data_base=contrato["data_base"],
-                regiao=regiao,
-                fonte=fonte,
-            )
-        except IndiceIndisponivel as e:
-            _anotar(faltando, str(e))
+        processados.add(chave)
+        familia, mes_medicao = chave
 
-    return deltas, faltando
+        regiao = regioes.get(familia)
+        if not regiao:
+            codigo = f"regiao_{familia.lower()}"
+            texto = f"{codigo}: escolha a região da ANP para a família {familia}."
+            _acrescentar(faltando, mensagens, codigo, texto)
+            continue
+
+        problemas = delta_p_faltantes(
+            familia, mes_medicao=mes_medicao, data_base=contrato["data_base"],
+            regiao=regiao, fonte=fonte,
+        )
+        if problemas:
+            for problema in problemas:
+                _acrescentar(faltando, mensagens, problema, problema)
+            continue
+
+        deltas[chave] = delta_p(
+            familia, mes_medicao=mes_medicao, data_base=contrato["data_base"],
+            regiao=regiao, fonte=fonte,
+        )
+
+    return deltas, faltando, mensagens
 
 
 def calcular_deltas(
@@ -350,7 +388,8 @@ def calcular_deltas(
     blocks the export: a spreadsheet missing ΔP would look complete and be wrong.
     """
     regioes, _ = regioes_efetivas(contrato, regioes_override)
-    return _deltas(contrato, itens, regioes)
+    deltas, faltando, _ = _deltas(contrato, itens, regioes)
+    return deltas, faltando
 
 
 def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
@@ -369,10 +408,10 @@ def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
             "Associe os códigos no catálogo ou processe as medições."
         )
 
-    deltas, faltando = _deltas(contrato, itens, regioes)
+    deltas, faltando, mensagens = _deltas(contrato, itens, regioes)
     if faltando:
         raise ExportacaoImpossivel(
-            "Faltam dados para calcular o ΔP:\n- " + "\n- ".join(faltando), faltando
+            "Faltam dados para calcular o ΔP:\n- " + "\n- ".join(mensagens), faltando
         )
 
     grupos, descartadas = montar_grupos(itens, deltas)
