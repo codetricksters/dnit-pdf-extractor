@@ -108,3 +108,81 @@ class Associacao(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     produto_id: int
+
+
+class SemanaAnp(BaseModel):
+    id: int
+    produto: str
+    regiao: str
+    vigencia_inicio: date
+    vigencia_fim: date
+    preco: Decimal | None
+    origem: str
+    atualizado_em: datetime
+
+
+class SemanaAnpEntrada(BaseModel):
+    """Uma semana digitada; ``preco`` nulo = semana sem cotação."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    produto: str | None = None
+    vigencia_inicio: date
+    vigencia_fim: date
+    regiao: str
+    preco: Decimal | None
+
+
+class IndiceMensal(BaseModel):
+    mes: str
+    valor: Decimal
+    origem: str
+    atualizado_em: datetime
+
+
+class IndiceEntrada(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valor: Decimal
+
+
+class PeriodoCoberto(BaseModel):
+    de: date | None
+    ate: date | None
+    registros: int
+
+
+class Cobertura(BaseModel):
+    anp: PeriodoCoberto
+    igp_di: PeriodoCoberto
+    regioes: list[str]
+
+
+class Periodo(BaseModel):
+    de: date | None
+    ate: date | None
+
+
+class Alteracao(BaseModel):
+    chave: dict[str, str]
+    antes: Decimal | None
+    depois: Decimal | None
+
+
+class ConflitoManual(BaseModel):
+    chave: dict[str, str]
+    valor_banco: Decimal | None
+    valor_arquivo: Decimal | None
+    atualizado_em: datetime
+
+
+class ResultadoImportacao(BaseModel):
+    arquivo: str
+    simulacao: bool
+    periodo: Periodo
+    inseridos: int
+    atualizados: list[Alteracao]
+    inalterados: int
+    conflitos_manuais: list[ConflitoManual]
+    manuais_preservados: int
+    avisos: list[str]
