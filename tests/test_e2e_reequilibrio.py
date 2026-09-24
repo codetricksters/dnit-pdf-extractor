@@ -9,7 +9,6 @@ ao usuário: o oráculo não é ajustado para o teste passar.
 import csv
 import io
 import json
-from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
@@ -20,7 +19,7 @@ from app.services import template_repo, xlsx_drawings
 from app.services.file_processor import _persistir
 from app.services.reequilibrio_layout import ABA
 
-FIXTURES = Path("tests/fixtures")
+FIXTURES = Path(__file__).parent / "fixtures"
 NUMERO = "99 99999/2099"
 TOLERANCIA = Decimal("1e-9")
 LUCRO = Decimal("0.0511")
@@ -124,28 +123,36 @@ async def test_ponta_a_ponta(client):
     assert meses <= {f"2023-{m:02d}-01" for m in range(1, 13)}
     assert "2023-01-01" in meses
 
+    # O app soma f por produto, soma os subtotais de produto por família e só
+    # então soma os subtotais de família no total (reequilibrio_export.py,
+    # calcular(), linhas 459-485); a comparação replica a mesma ordem para
+    # ser bit exata em cada nível.
     total = Decimal(0)
-    for familia, _, linha in linhas:
-        a, fator, d = Decimal(linha["a"]), Decimal(linha["fator"]), Decimal(linha["d"])
-        # ΔP contra o oráculo do Excel.
-        assert abs(d - oraculo[linha["mes"]][familia]) < TOLERANCIA, (familia, linha["mes"])
-        # As fórmulas do art. 16, recalculadas aqui.
-        b = (a * fator).quantize(CENTAVO, rounding=ROUND_DOWN)
-        c = a * d
-        e = c - b
-        f = e * (1 - LUCRO)
-        assert Decimal(linha["b"]) == b
-        assert Decimal(linha["c"]) == c
-        assert Decimal(linha["e"]) == e
-        assert Decimal(linha["f"]) == f
-        total += f
-    # O total do app soma por produto e depois por família (arredondamento de
-    # contexto do Decimal padrão, 28 dígitos significativos, a cada soma
-    # parcial); somar tudo de uma vez aqui, em outra ordem, produz o mesmo
-    # valor a menos de ruído de 1 ULP nessa precisão — não é divergência de
-    # regra, é não-associatividade inerente à aritmética decimal de precisão
-    # finita. Cada valor por linha (b, c, e, f) já foi conferido bit a bit acima.
-    assert abs(Decimal(corpo["total"]) - total) < Decimal("1e-15")
+    for familia in corpo["familias"]:
+        subtotal_familia = Decimal(0)
+        for produto in familia["produtos"]:
+            subtotal_produto = Decimal(0)
+            for linha in produto["linhas"]:
+                a, fator, d = Decimal(linha["a"]), Decimal(linha["fator"]), Decimal(linha["d"])
+                # ΔP contra o oráculo do Excel.
+                assert abs(d - oraculo[linha["mes"]][familia["familia"]]) < TOLERANCIA, (
+                    familia["familia"], linha["mes"]
+                )
+                # As fórmulas do art. 16, recalculadas aqui.
+                b = (a * fator).quantize(CENTAVO, rounding=ROUND_DOWN)
+                c = a * d
+                e = c - b
+                f = e * (1 - LUCRO)
+                assert Decimal(linha["b"]) == b
+                assert Decimal(linha["c"]) == c
+                assert Decimal(linha["e"]) == e
+                assert Decimal(linha["f"]) == f
+                subtotal_produto += f
+            assert Decimal(produto["subtotal"]) == subtotal_produto
+            subtotal_familia += subtotal_produto
+        assert Decimal(familia["subtotal"]) == subtotal_familia
+        total += subtotal_familia
+    assert Decimal(corpo["total"]) == total
 
     janeiro_cap = [l for fam, _, l in linhas if fam == "CAP" and l["mes"] == "2023-01-01"]
     assert [l["a"] for l in janeiro_cap] == ["21862.28"]
