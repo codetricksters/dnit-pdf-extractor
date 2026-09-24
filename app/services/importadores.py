@@ -118,8 +118,8 @@ def _preco(valor) -> Decimal | None:
             return None
         raise ValueError(f"preço {texto!r} não é um número")
     preco = Decimal(str(valor))
-    if preco < 0:
-        raise ValueError(f"preço negativo ({preco})")
+    if preco <= 0:
+        raise ValueError(f"preço deve ser maior que zero ({preco})")
     return preco.quantize(CASAS_ANP)
 
 
@@ -199,6 +199,71 @@ def ler_anp(conteudo: bytes) -> Leitura:
     return ler_linhas_anp([aba.row_values(i) for i in range(aba.nrows)])
 
 
+# Uma entrada de sobreposição carrega de onde ela vem, porque a mensagem (e se
+# ela é reportada) depende disso: duas semanas cadastradas que já se sobrepõem
+# não são deste import (o banco já as impede); uma semana manual preservada
+# ainda precisa aparecer, porque é o único jeito de o usuário saber que ela vai
+# colidir com o que está para ser gravado.
+TAG_ARQUIVO = "arquivo"
+TAG_EXISTENTE = "existente"
+TAG_MANUAL = "manual"
+
+
+def _mensagem_sobreposicao(produto: str, regiao: str, anterior: tuple, atual: tuple) -> str | None:
+    a_ini, a_fim, a_tag = anterior
+    ini, fim, tag = atual
+    if TAG_ARQUIVO not in (a_tag, tag):
+        return None  # nenhuma das duas é do arquivo: o banco já impede isso.
+    if TAG_MANUAL in (a_tag, tag):
+        manual_ini, manual_fim = (a_ini, a_fim) if a_tag == TAG_MANUAL else (ini, fim)
+        arquivo_ini, arquivo_fim = (ini, fim) if tag == TAG_ARQUIVO else (a_ini, a_fim)
+        texto = (
+            f"a semana {_semana(arquivo_ini, arquivo_fim)} do arquivo se sobrepõe à "
+            f"semana {_semana(manual_ini, manual_fim)}, que tem valor cadastrado "
+            "manualmente e seria preservada. Para substituí-la, importe novamente "
+            "com sobrescrever_manuais=true."
+        )
+    elif tag == TAG_ARQUIVO and a_tag == TAG_ARQUIVO:
+        texto = (f"a semana {_semana(ini, fim)} se sobrepõe à semana "
+                 f"{_semana(a_ini, a_fim)} do próprio arquivo.")
+    elif tag == TAG_ARQUIVO:
+        texto = (f"a semana {_semana(ini, fim)} se sobrepõe à semana "
+                 f"{_semana(a_ini, a_fim)} já cadastrada.")
+    else:
+        texto = (f"a semana {_semana(a_ini, a_fim)} do arquivo se sobrepõe "
+                 f"à semana {_semana(ini, fim)} já cadastrada.")
+    return f"{produto}, {regiao}: {texto}"
+
+
+def sobreposicoes_marcadas(entradas: list[tuple]) -> list[str]:
+    """Sobreposições entre semanas já rotuladas (``TAG_ARQUIVO``/``TAG_EXISTENTE``/
+    ``TAG_MANUAL``) de um mesmo produto e região.
+
+    *entradas* é uma lista de ``(produto, regiao, inicio, fim, tag)``, no máximo
+    uma por ``(produto, regiao, inicio)`` — é quem chama que decide o que uma
+    mesma semana representa quando há mais de uma fonte para ela. Usada por
+    ``sobreposicoes`` (verificação preliminar) e por ``importacao`` (verificação
+    contra o estado que o plano de fato vai gravar, que pode preservar um valor
+    manual em vez de sobrescrevê-lo).
+    """
+    semanas: dict[tuple[str, str], dict[date, tuple[date, str]]] = defaultdict(dict)
+    for produto, regiao, inicio, fim, tag in entradas:
+        semanas[(produto, regiao)][inicio] = (fim, tag)
+
+    erros = []
+    for (produto, regiao), por_inicio in semanas.items():
+        anterior: tuple[date, date, str] | None = None  # a de maior fim até aqui
+        for inicio in sorted(por_inicio):
+            fim, tag = por_inicio[inicio]
+            if anterior and inicio <= anterior[1]:
+                erro = _mensagem_sobreposicao(produto, regiao, anterior, (inicio, fim, tag))
+                if erro:
+                    erros.append(erro)
+            if anterior is None or fim > anterior[1]:
+                anterior = (inicio, fim, tag)
+    return erros
+
+
 def sobreposicoes(novos: list[dict], existentes: dict) -> list[str]:
     """Semanas do arquivo que se sobrepõem entre si ou às já cadastradas.
 
@@ -206,33 +271,21 @@ def sobreposicoes(novos: list[dict], existentes: dict) -> list[str]:
     arquivo com o mesmo início de uma cadastrada a substitui (é uma correção),
     então só a do arquivo entra na verificação. Sobreposições só entre semanas
     cadastradas não são reportadas: a constraint do banco já as impede.
-    """
-    semanas: dict[tuple[str, str], dict[date, tuple[date, bool]]] = defaultdict(dict)
-    for (produto, inicio, regiao), linha in existentes.items():
-        semanas[(produto, regiao)][inicio] = (linha["vigencia_fim"], False)
-    for r in novos:
-        semanas[(r["produto"], r["regiao"])][r["vigencia_inicio"]] = (r["vigencia_fim"], True)
 
-    erros = []
-    for (produto, regiao), por_inicio in semanas.items():
-        anterior: tuple[date, date, bool] | None = None  # a de maior fim até aqui
-        for inicio in sorted(por_inicio):
-            fim, do_arquivo = por_inicio[inicio]
-            if anterior and inicio <= anterior[1] and (do_arquivo or anterior[2]):
-                a_ini, a_fim, a_arq = anterior
-                if do_arquivo and a_arq:
-                    texto = (f"a semana {_semana(inicio, fim)} se sobrepõe à semana "
-                             f"{_semana(a_ini, a_fim)} do próprio arquivo.")
-                elif do_arquivo:
-                    texto = (f"a semana {_semana(inicio, fim)} se sobrepõe à semana "
-                             f"{_semana(a_ini, a_fim)} já cadastrada.")
-                else:
-                    texto = (f"a semana {_semana(a_ini, a_fim)} do arquivo se sobrepõe "
-                             f"à semana {_semana(inicio, fim)} já cadastrada.")
-                erros.append(f"{produto}, {regiao}: {texto}")
-            if anterior is None or fim > anterior[1]:
-                anterior = (inicio, fim, do_arquivo)
-    return erros
+    Esta verificação é preliminar: assume que toda semana do arquivo será
+    gravada como está. Quando a gravação pode preservar um valor manual em vez
+    de sobrescrevê-lo, ``importacao.importar_precos`` verifica de novo com
+    ``sobreposicoes_marcadas``, contra o estado que o plano de fato vai gravar.
+    """
+    entradas = [
+        (produto, regiao, inicio, linha["vigencia_fim"], TAG_EXISTENTE)
+        for (produto, inicio, regiao), linha in existentes.items()
+    ]
+    entradas += [
+        (r["produto"], r["regiao"], r["vigencia_inicio"], r["vigencia_fim"], TAG_ARQUIVO)
+        for r in novos
+    ]
+    return sobreposicoes_marcadas(entradas)
 
 
 # --- IGP-DI ----------------------------------------------------------------------

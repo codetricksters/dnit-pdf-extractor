@@ -70,18 +70,15 @@ def importar_precos(
     leitura: Leitura, *, arquivo: str, simular: bool = False,
     sobrescrever_manuais: bool = False, origem: str | None = None,
 ) -> dict:
+    def chave(r: dict) -> tuple:
+        return (r["produto"], r["vigencia_inicio"], r["regiao"])
+
     novos = leitura.registros
     existentes = indices_repo.precos_anp_por_chave({r["produto"] for r in novos})
-    conflitos = importadores.sobreposicoes(novos, existentes)
-    if conflitos:
-        raise ArquivoInvalido(
-            f"O arquivo tem {len(conflitos)} semana(s) sobreposta(s); nada foi gravado.",
-            importadores.limitar(conflitos),
-        )
     plano = planejar(
         novos,
         existentes,
-        chave=lambda r: (r["produto"], r["vigencia_inicio"], r["regiao"]),
+        chave=chave,
         comparavel=lambda r: (r["vigencia_fim"], r["preco"]),
         valor=lambda r: r["preco"],
         mostrar=lambda r: {
@@ -92,6 +89,34 @@ def importar_precos(
         },
         sobrescrever_manuais=sobrescrever_manuais,
     )
+
+    # Sobreposições contra o que a gravação de fato vai produzir, não contra o
+    # que o arquivo "pretende": uma semana manual preservada (não sobrescrita
+    # porque sobrescrever_manuais é falso) continua com a vigência que já
+    # tinha, e uma semana nova do arquivo pode colidir com ela mesmo sem
+    # colidir com a semana que o arquivo tentou substituir. Roda igual em
+    # simular=True e em simular=False, para a prévia não prometer o que a
+    # gravação recusaria.
+    escritas = {chave(r) for r in plano.gravar}
+    entradas = [
+        (r["produto"], r["regiao"], r["vigencia_inicio"], r["vigencia_fim"], importadores.TAG_ARQUIVO)
+        for r in plano.gravar
+    ]
+    for (produto, inicio, regiao), linha in existentes.items():
+        if (produto, inicio, regiao) in escritas:
+            continue
+        tag = (
+            importadores.TAG_MANUAL if linha["origem"] == indices_repo.ORIGEM_MANUAL
+            else importadores.TAG_EXISTENTE
+        )
+        entradas.append((produto, regiao, inicio, linha["vigencia_fim"], tag))
+    conflitos = importadores.sobreposicoes_marcadas(entradas)
+    if conflitos:
+        raise ArquivoInvalido(
+            f"O arquivo tem {len(conflitos)} semana(s) sobreposta(s); nada foi gravado.",
+            importadores.limitar(conflitos),
+        )
+
     if not simular:
         indices_repo.gravar_precos_anp(
             plano.gravar, origem=origem or indices_repo.origem_upload(arquivo)

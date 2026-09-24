@@ -86,6 +86,33 @@ async def test_sobreposicao_recusa_o_arquivo_sem_gravar_nada():
     assert len(indices_repo.listar_precos_anp()) == 1
 
 
+async def test_semana_manual_preservada_causa_sobreposicao_com_semana_nova():
+    """Sem sobrescrever_manuais, a semana manual 09-15 não é substituída pela
+    09-12 do arquivo — continua com fim em 15, que colide com a 13-19 nova.
+    A prévia (simular=True) tem de recusar exatamente como a gravação real."""
+    indices_repo.gravar_semana_manual(
+        {"vigencia_inicio": date(2023, 1, 9), "vigencia_fim": date(2023, 1, 15),
+         "regiao": "Nordeste", "preco": "9.99"}
+    )
+    leitura = _leitura(semana(date(2023, 1, 9), "3.28", dias=3), semana(date(2023, 1, 13), "3.30"))
+
+    with pytest.raises(ArquivoInvalido) as previa:
+        _anp(leitura, simular=True)
+    assert any("manual" in e for e in previa.value.erros)
+
+    with pytest.raises(ArquivoInvalido) as grava:
+        _anp(leitura)
+    assert any("manual" in e for e in grava.value.erros)
+
+    salvas = indices_repo.listar_precos_anp(regiao="Nordeste")
+    assert len(salvas) == 1 and salvas[0]["preco"] == Decimal("9.99")
+
+    resposta = _anp(leitura, sobrescrever_manuais=True)
+    assert resposta["conflitos_manuais"] and resposta["atualizados"]
+    salvas = indices_repo.listar_precos_anp(regiao="Nordeste")
+    assert {s["vigencia_inicio"] for s in salvas} == {date(2023, 1, 9), date(2023, 1, 13)}
+
+
 async def test_origem_explicita_para_o_seed():
     _anp(_leitura(semana(date(2023, 1, 9), "3.28")), origem=indices_repo.ORIGEM_SEED)
     assert indices_repo.listar_precos_anp()[0]["origem"] == "seed"

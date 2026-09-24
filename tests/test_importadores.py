@@ -50,6 +50,7 @@ def test_rodape_encerra_a_leitura():
     [
         (linha_anp(CAP, date(2023, 1, 9), ["abc", 1, 1, 1, 1, 1]), "linha 10, Norte"),
         (linha_anp(CAP, date(2023, 1, 9), [1, -2, 1, 1, 1, 1]), "linha 10, Nordeste"),
+        (linha_anp(CAP, date(2023, 1, 9), [1, 0, 1, 1, 1, 1]), "linha 10, Nordeste"),
         (linha_anp(CAP, date(2023, 1, 9), PRECOS, dias=-3), "linha 10: a semana termina"),
     ],
 )
