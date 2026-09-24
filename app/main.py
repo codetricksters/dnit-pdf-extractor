@@ -19,6 +19,7 @@ from .routers import admin
 from .routers import upload
 from .routers import jobs
 from .routers import reequilibrio
+from .routers import api
 from .dashboard import create_dash_app
 from .services import backup, template_repo
 from .services.job_manager import cleanup_stale_jobs, init_db, close_db
@@ -77,5 +78,7 @@ app.include_router(upload.router)
 app.include_router(jobs.router)
 app.include_router(admin.router)
 app.include_router(reequilibrio.router)
+app.include_router(api.router)
+app.add_exception_handler(api.ErroApi, api.tratar_erro_api)
 
 app.mount("/dashboard", create_dash_app())
