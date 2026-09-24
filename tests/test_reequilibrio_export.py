@@ -9,16 +9,21 @@ from pathlib import Path
 import openpyxl
 import pytest
 
-from app.services import contratos_repo, medicoes_repo, reequilibrio_export, xlsx_drawings
+from app.services import contratos_repo, indices_repo, medicoes_repo, reequilibrio_export, xlsx_drawings
 from app.services.delta_p import FAMILIA_CAP, FAMILIA_EMULSOES
 from app.services.reequilibrio_export import (
+    Calculo,
     ExportacaoImpossivel,
     Grupo,
     Linha,
     gerar_planilha,
     montar_grupos,
+    regioes_efetivas,
+    serializar,
 )
 from app.services.reequilibrio_layout import ABA, PRIMEIRA_LINHA, ROTULO_SUBTOTAL, ROTULO_TOTAL
+
+from .indices_factory import mes_igp, semana
 
 TEMPLATE = Path("app/templates_xlsx/reequilibrio_template.xlsx")
 
@@ -327,3 +332,96 @@ async def test_exportar_sem_codigos_associados(template):
     with pytest.raises(ExportacaoImpossivel) as erro:
         reequilibrio_export.exportar("15 00716/2022", template)
     assert "associado" in str(erro.value)
+
+
+def _indices_para_fevereiro():
+    """Base dez/2021 e jan/2023 (ANP do mês de fev/2023) em Nordeste e Sul."""
+    for regiao, base, janeiro in (("Nordeste", "4.02073", "3.28568"), ("Sul", "4.29019", "3.45")):
+        indices_repo.gravar_precos_anp(
+            [semana(date(2021, 12, 13), base, regiao=regiao),
+             semana(date(2023, 1, 9), janeiro, regiao=regiao)]
+        )
+    indices_repo.gravar_indices_mensais(
+        [mes_igp(date(2022, 1, 1), "1110.398"), mes_igp(date(2023, 2, 1), "1144.271")]
+    )
+
+
+def _d(calculo) -> Decimal:
+    return calculo.grupos[0].linhas[0].delta_p
+
+
+async def test_simulacao_troca_a_regiao_so_nesta_geracao(template):
+    await _contrato_com_medicoes()
+    _indices_para_fevereiro()
+    contrato = contratos_repo.buscar("15 00716/2022")
+
+    padrao = reequilibrio_export.calcular(contrato)
+    assert padrao.simuladas == {}
+    assert abs(_d(padrao) - (Decimal("3.28568") / Decimal("4.02073") - 1)) < Decimal("1e-20")
+
+    simulado = reequilibrio_export.calcular(contrato, {"CAP": "sul"})
+    assert simulado.regioes[FAMILIA_CAP] == "Sul"
+    assert simulado.simuladas == {FAMILIA_CAP: "Sul"}
+    assert abs(_d(simulado) - (Decimal("3.45") / Decimal("4.29019") - 1)) < Decimal("1e-20")
+    assert "Simulação: CAP calculado com a região Sul (cadastro: Nordeste)." in simulado.avisos
+    for aviso in simulado.avisos:
+        aviso.encode("latin-1")  # vai para o cabeçalho X-Avisos
+    assert contratos_repo.buscar("15 00716/2022")["regioes"][FAMILIA_CAP] == "Nordeste"
+
+    resultado = reequilibrio_export.exportar("15 00716/2022", template, {"CAP": "Sul"})
+    assert resultado.avisos == simulado.avisos
+
+
+async def test_override_igual_ao_cadastro_nao_e_simulacao():
+    _indices_para_fevereiro()
+    contrato = {"regioes": {FAMILIA_CAP: "Nordeste"}}
+    efetivas, simuladas = regioes_efetivas(contrato, {"CAP": "NORDESTE", "EMULSOES": None})
+    assert efetivas == {FAMILIA_CAP: "Nordeste"} and simuladas == {}
+
+
+async def test_override_com_regiao_sem_preco_e_recusado():
+    _indices_para_fevereiro()
+    with pytest.raises(ExportacaoImpossivel) as erro:
+        regioes_efetivas({"regioes": {}}, {"EMULSOES": "Centro-Oeste"})
+    assert erro.value.faltando == ["regiao_emulsoes"]
+
+
+async def test_sem_data_base_informa_o_campo():
+    contrato_id = contratos_repo.registrar_do_pdf({**HEADER, "Data Base": ""})
+    with pytest.raises(ExportacaoImpossivel) as erro:
+        reequilibrio_export.calcular(contratos_repo.buscar_por_id(contrato_id))
+    assert erro.value.faltando == ["data_base"]
+
+
+async def test_indices_ausentes_vem_na_lista_faltando():
+    await _contrato_com_medicoes()
+    with pytest.raises(ExportacaoImpossivel) as erro:
+        reequilibrio_export.calcular(contratos_repo.buscar("15 00716/2022"))
+    assert erro.value.faltando
+    assert all(f in erro.value.mensagem for f in erro.value.faltando)
+
+
+def test_serializar_aplica_as_formulas_do_art_16():
+    a, fator, d = Decimal("208133.17"), Decimal("-0.1839"), Decimal("-0.0758")
+    calculo = Calculo(
+        contrato={"id": 7, "numero": "15 00716/2022", "data_base": date(2022, 1, 1)},
+        regioes={FAMILIA_CAP: "Nordeste"},
+        simuladas={},
+        grupos=[Grupo("AQUISIÇÃO DE CAP 50/70", FAMILIA_CAP, [Linha(date(2023, 1, 1), a, fator, d)])],
+        descartadas=0,
+        avisos=[],
+    )
+    dados = serializar(calculo)
+    (familia,) = dados["familias"]
+    assert familia["rotulo"] == "Aquisição de CAP"
+    (linha,) = familia["produtos"][0]["linhas"]
+    assert linha["b"] == Decimal("-38275.68")  # TRUNC(-38275.689963, 2)
+    assert linha["c"] == a * d
+    assert linha["e"] == a * d - Decimal("-38275.68")
+    assert linha["f"] == linha["e"] * (1 - Decimal("0.0511"))
+    assert familia["produtos"][0]["subtotal"] == familia["subtotal"] == dados["total"] == linha["f"]
+    assert dados["parametros"] == {
+        "data_base": date(2022, 1, 1), "regioes": {FAMILIA_CAP: "Nordeste"},
+        "simulacao": False, "lucro": Decimal("0.0511"),
+    }
+    assert dados["contrato"] == {"id": 7, "numero": "15 00716/2022"}

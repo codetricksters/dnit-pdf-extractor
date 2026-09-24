@@ -5,8 +5,10 @@ from decimal import Decimal
 
 import pytest
 
-from app.services import contratos_repo, medicoes_repo
+from app.services import contratos_repo, indices_repo, medicoes_repo
 from app.services.delta_p import FAMILIA_CAP, FAMILIA_EMULSOES
+
+from .indices_factory import semana
 
 # Exactly as it comes out of the PDFs: the number, the contractor and the
 # leftovers of the índices side-table, all in one field.
@@ -129,15 +131,18 @@ async def test_extensao_sem_digitos_fica_nula_e_nao_perde_o_resto():
     assert "extensao" in contratos_repo.campos_faltantes(contrato)
 
 
-async def test_cadastro_nao_pode_alterar_a_data_base():
-    """data_base sets the ΔP denominator, so it stays PDF-owned."""
+async def test_cadastro_pode_corrigir_a_data_base():
+    """A Data Base vem sugerida pelo PDF e é editável (spec, regra 1)."""
     contratos_repo.registrar_do_pdf(HEADER)
     contratos_repo.salvar_cadastro(
-        "06 00134/2022", {"data_base": date(2019, 1, 1), "rodovia": "BR-135/MA"}
+        "06 00134/2022", {"data_base": "15/01/2019", "rodovia": "BR-135/MA"}
     )
     contrato = contratos_repo.buscar("06 00134/2022")
-    assert contrato["data_base"] == date(2021, 1, 1)
+    assert contrato["data_base"] == date(2019, 1, 1)
     assert contrato["rodovia"] == "BR-135/MA"
+    # E reprocessar o PDF não desfaz a correção.
+    contratos_repo.registrar_do_pdf(HEADER)
+    assert contratos_repo.buscar("06 00134/2022")["data_base"] == date(2019, 1, 1)
 
 
 async def test_regiao_por_familia_e_independente():
@@ -249,3 +254,72 @@ async def test_meses_do_contrato():
         date(2023, 3, 1),
         date(2023, 4, 1),
     ]
+
+
+def _precos(*regioes):
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.2", regiao=r) for r in regioes])
+
+
+async def test_atualizar_campos_data_base_e_regioes():
+    _precos("Nordeste", "Sul")
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    assert contratos_repo.atualizar(
+        contrato_id,
+        {"rodovia": "BR-316/MA", "extensao": "188,7", "data_base": "2022-01"},
+        regioes={"CAP": "NORDESTE", "EMULSOES": "sul"},
+    ) is True
+    contrato = contratos_repo.buscar_por_id(contrato_id)
+    assert contrato["rodovia"] == "BR-316/MA"
+    assert contrato["extensao"] == Decimal("188.7")
+    assert contrato["data_base"] == date(2022, 1, 1)
+    assert contrato["regioes"] == {FAMILIA_CAP: "Nordeste", FAMILIA_EMULSOES: "Sul"}
+
+
+async def test_atualizar_contrato_inexistente():
+    assert contratos_repo.atualizar(999, {"rodovia": "x"}) is False
+    assert contratos_repo.buscar_por_id(999) is None
+
+
+@pytest.mark.parametrize(
+    "dados,regioes,trecho",
+    [
+        ({"numero": "1"}, None, "numero"),
+        ({"data_base": ""}, None, "Data Base"),
+        ({"data_base": "janeiro"}, None, "ilegível"),
+        ({}, {"ASFALTO": "Nordeste"}, "Família"),
+        ({}, {"CAP": "Marte"}, "Nordeste"),
+    ],
+)
+async def test_atualizar_recusa_sem_gravar_nada(dados, regioes, trecho):
+    _precos("Nordeste")
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    with pytest.raises(contratos_repo.CadastroInvalido) as erro:
+        contratos_repo.atualizar(contrato_id, {"rodovia": "BR-1", **dados}, regioes)
+    assert trecho in str(erro.value)
+    assert contratos_repo.buscar_por_id(contrato_id)["rodovia"] is None
+
+
+async def test_regiao_sem_precos_importados_orienta_a_importar():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    with pytest.raises(contratos_repo.CadastroInvalido) as erro:
+        contratos_repo.atualizar(contrato_id, {}, {"CAP": "Nordeste"})
+    assert "importe os preços ANP" in str(erro.value)
+
+
+async def test_listar_traz_resumo_e_filtra_por_numero():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    contratos_repo.definir_regiao("06 00134/2022", FAMILIA_CAP, "Nordeste")
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [
+            {"Serviço": "60112", "Descrição": "CAP", "Valor a PI Líquido": 1.0, "Fator": 0.1,
+             "Período Líquido": f"01/0{m}/2023 - 28/0{m}/2023", "Source_File": f"{m}.pdf"}
+            for m in (1, 2)
+        ],
+    )
+    (linha,) = contratos_repo.listar()
+    assert linha["itens"] == 2 and linha["medicoes"] == 2
+    assert linha["regioes"] == {FAMILIA_CAP: "Nordeste"}
+    assert "regiao_emulsoes" in linha["faltantes"]
+    assert contratos_repo.listar("00134") == [linha]
+    assert contratos_repo.listar("99999") == []

@@ -20,12 +20,13 @@ import io
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 import openpyxl
 
-from . import contratos_repo, medicoes_repo, xlsx_drawings
-from .delta_p import IndiceIndisponivel, delta_p
+from . import contratos_repo, indices_repo, medicoes_repo, xlsx_drawings
+from .catalogo import ROTULOS_FAMILIA
+from .delta_p import FAMILIAS, IndiceIndisponivel, delta_p
 from .indices_repo import FonteBanco
 from .reequilibrio_layout import (
     ABA,
@@ -54,7 +55,16 @@ from .reequilibrio_layout import (
 )
 
 class ExportacaoImpossivel(Exception):
-    """The export cannot be produced, with a reason to show the user."""
+    """The export cannot be produced, with a reason to show the user.
+
+    ``faltando`` lists every missing piece (índices, data_base, a region), so
+    the API can return them all at once instead of one per attempt.
+    """
+
+    def __init__(self, mensagem: str, faltando: list[str] | None = None) -> None:
+        super().__init__(mensagem)
+        self.mensagem = mensagem
+        self.faltando = list(faltando or [])
 
 
 @dataclass
@@ -83,6 +93,21 @@ class Resultado:
     linhas: int
     descartadas: int
     avisos: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Calculo:
+    """Everything the JSON and the spreadsheet share, computed once."""
+
+    contrato: dict
+    regioes: dict[str, str]
+    simuladas: dict[str, str]
+    grupos: list[Grupo]
+    descartadas: int
+    avisos: list[str] = field(default_factory=list)
+
+
+CENTAVO = Decimal("0.01")
 
 
 def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date], Decimal]) -> tuple[list[Grupo], int]:
@@ -263,14 +288,34 @@ def _anotar(faltando: list[str], aviso: str) -> None:
         faltando.append(aviso)
 
 
-def calcular_deltas(contrato: dict, itens: list[dict]) -> tuple[dict, list[str]]:
-    """ΔP for every (família, mês) the spreadsheet needs.
+def regioes_efetivas(contrato: dict, override: dict | None = None) -> tuple[dict, dict]:
+    """The regions this generation uses: the registered ones, replaced by
+    *override* for this export only (a simulation). Returns ``(efetivas,
+    simuladas)``; ``simuladas`` holds only families whose region changed."""
+    cadastro = dict(contrato.get("regioes") or {})
+    efetivas = dict(cadastro)
+    simuladas: dict[str, str] = {}
+    for familia, regiao in (override or {}).items():
+        if not regiao:
+            continue
+        campo = f"regiao_{familia.lower()}"
+        if familia not in FAMILIAS:
+            raise ExportacaoImpossivel(f"Família desconhecida: {familia!r}.", [campo])
+        grafia = indices_repo.normalizar_regiao(regiao)
+        if grafia is None:
+            raise ExportacaoImpossivel(
+                f"Região {regiao!r} sem preços ANP do CAP 50/70; escolha uma das "
+                "regiões importadas.",
+                [campo],
+            )
+        efetivas[familia] = grafia
+        if grafia != cadastro.get(familia):
+            simuladas[familia] = grafia
+    return efetivas, simuladas
 
-    A família whose region was never chosen, or a month with no published índice,
-    blocks the export: a spreadsheet missing ΔP would look complete and be wrong.
-    """
+
+def _deltas(contrato: dict, itens: list[dict], regioes: dict) -> tuple[dict, list[str]]:
     fonte = FonteBanco()
-    regioes = contrato.get("regioes") or {}
     deltas: dict[tuple[str, date], Decimal] = {}
     faltando: list[str] = []
 
@@ -296,15 +341,26 @@ def calcular_deltas(contrato: dict, itens: list[dict]) -> tuple[dict, list[str]]
     return deltas, faltando
 
 
-def exportar(numero_contrato: str, template: bytes) -> Resultado:
-    """Assemble the spreadsheet for a contract from what is in the database."""
-    contrato = contratos_repo.buscar(numero_contrato)
-    if contrato is None:
-        raise ExportacaoImpossivel(f"Contrato '{numero_contrato}' não cadastrado.")
+def calcular_deltas(
+    contrato: dict, itens: list[dict], regioes_override: dict | None = None
+) -> tuple[dict, list[str]]:
+    """ΔP for every (família, mês) the spreadsheet needs.
+
+    A família whose region was never chosen, or a month with no published índice,
+    blocks the export: a spreadsheet missing ΔP would look complete and be wrong.
+    """
+    regioes, _ = regioes_efetivas(contrato, regioes_override)
+    return _deltas(contrato, itens, regioes)
+
+
+def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
+    """The whole calculation for a contract, shared by the JSON and the .xlsx."""
     if contrato.get("data_base") is None:
         raise ExportacaoImpossivel(
-            "O contrato está sem Data Base, e sem ela não há como calcular o ΔP."
+            "O contrato está sem Data Base, e sem ela não há como calcular o ΔP.",
+            ["data_base"],
         )
+    regioes, simuladas = regioes_efetivas(contrato, regioes_override)
 
     itens = medicoes_repo.itens_para_export(contrato["id"])
     if not itens:
@@ -313,16 +369,20 @@ def exportar(numero_contrato: str, template: bytes) -> Resultado:
             "Associe os códigos no catálogo ou processe as medições."
         )
 
-    deltas, faltando = calcular_deltas(contrato, itens)
+    deltas, faltando = _deltas(contrato, itens, regioes)
     if faltando:
         raise ExportacaoImpossivel(
-            "Faltam dados para calcular o ΔP:\n- " + "\n- ".join(faltando)
+            "Faltam dados para calcular o ΔP:\n- " + "\n- ".join(faltando), faltando
         )
 
     grupos, descartadas = montar_grupos(itens, deltas)
-    conteudo = gerar_planilha(contrato, grupos, template)
 
     avisos = []
+    for familia, regiao in simuladas.items():
+        cadastrada = (contrato.get("regioes") or {}).get(familia) or "sem região"
+        avisos.append(
+            f"Simulação: {familia} calculado com a região {regiao} (cadastro: {cadastrada})."
+        )
     if descartadas:
         avisos.append(
             f"{descartadas} linha(s) repetida(s) foram ignoradas: a mesma medição "
@@ -331,14 +391,78 @@ def exportar(numero_contrato: str, template: bytes) -> Resultado:
     faltam_cadastro = contratos_repo.campos_faltantes(contrato)
     if faltam_cadastro:
         avisos.append(
-            "Campos do contrato ainda não cadastrados: "
-            + ", ".join(faltam_cadastro)
+            "Campos do contrato ainda não cadastrados: " + ", ".join(faltam_cadastro)
         )
 
+    return Calculo(contrato, regioes, simuladas, grupos, descartadas, avisos)
+
+
+def gerar(calculo: Calculo, template: bytes) -> Resultado:
     return Resultado(
-        conteudo=conteudo,
-        grupos=len(grupos),
-        linhas=sum(len(g.linhas) for g in grupos),
-        descartadas=descartadas,
-        avisos=avisos,
+        conteudo=gerar_planilha(calculo.contrato, calculo.grupos, template),
+        grupos=len(calculo.grupos),
+        linhas=sum(len(g.linhas) for g in calculo.grupos),
+        descartadas=calculo.descartadas,
+        avisos=calculo.avisos,
     )
+
+
+def serializar(calculo: Calculo) -> dict:
+    """The calculation as data, with the spreadsheet's formulas evaluated.
+
+    Same letters as row 16 of the template: ``b = TRUNC(a·fator, 2)``,
+    ``c = a·d``, ``e = c − b``, ``f = e·(1 − lucro)``. TRUNC rounds toward zero,
+    which is ``ROUND_DOWN`` in Decimal.
+    """
+    fator_lucro = 1 - Decimal(LUCRO)
+    familias: list[dict] = []
+    por_familia: dict[str, dict] = {}
+    total = Decimal(0)
+    for grupo in calculo.grupos:
+        familia = por_familia.get(grupo.familia)
+        if familia is None:
+            familia = {
+                "familia": grupo.familia,
+                "rotulo": ROTULOS_FAMILIA.get(grupo.familia, grupo.familia),
+                "subtotal": Decimal(0),
+                "produtos": [],
+            }
+            por_familia[grupo.familia] = familia
+            familias.append(familia)
+        linhas = []
+        subtotal = Decimal(0)
+        for linha in grupo.linhas:
+            b = (linha.valor_pi * linha.fator).quantize(CENTAVO, rounding=ROUND_DOWN)
+            c = linha.valor_pi * linha.delta_p
+            e = c - b
+            f = e * fator_lucro
+            linhas.append({"mes": linha.mes, "a": linha.valor_pi, "fator": linha.fator,
+                           "b": b, "d": linha.delta_p, "c": c, "e": e, "f": f})
+            subtotal += f
+        familia["produtos"].append(
+            {"descricao": grupo.descricao, "subtotal": subtotal, "linhas": linhas}
+        )
+        familia["subtotal"] += subtotal
+        total += subtotal
+    return {
+        "contrato": {"id": calculo.contrato["id"], "numero": calculo.contrato["numero"]},
+        "parametros": {
+            "data_base": calculo.contrato["data_base"],
+            "regioes": calculo.regioes,
+            "simulacao": bool(calculo.simuladas),
+            "lucro": Decimal(LUCRO),
+        },
+        "familias": familias,
+        "total": total,
+        "avisos": calculo.avisos,
+    }
+
+
+def exportar(
+    numero_contrato: str, template: bytes, regioes_override: dict | None = None
+) -> Resultado:
+    """Assemble the spreadsheet for a contract from what is in the database."""
+    contrato = contratos_repo.buscar(numero_contrato)
+    if contrato is None:
+        raise ExportacaoImpossivel(f"Contrato '{numero_contrato}' não cadastrado.")
+    return gerar(calcular(contrato, regioes_override), template)

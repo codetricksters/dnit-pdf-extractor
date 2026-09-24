@@ -3,7 +3,7 @@ can supply.
 
 The export's header block needs eleven fields; the PDF header yields three. The
 rest (Edital, Rodovia, Trecho, Subtrecho, Segmento, Extensão, Contratada) is
-registered by the user and keyed by contract number.
+registered by the user, who may also correct the Data Base the PDF suggested.
 """
 
 import re
@@ -11,7 +11,8 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ..db import acquire_sync
-from .delta_p import FAMILIA_CAP, FAMILIA_EMULSOES, inicio_do_mes
+from . import indices_repo
+from .delta_p import FAMILIA_CAP, FAMILIA_EMULSOES, FAMILIAS, inicio_do_mes
 from .number_parser import parse_br_number
 
 # Fields the user owns. PDF-derived fields are deliberately absent: see
@@ -25,6 +26,16 @@ CAMPOS_CADASTRO = (
     "extensao",
     "contratada",
 )
+
+# Data Base: sugerida pelo PDF, corrigível pelo usuário (define o mês-base do ΔP).
+CAMPOS_EDITAVEIS = CAMPOS_CADASTRO + ("data_base",)
+
+_FORMATOS_DATA_BASE = ("%d/%m/%Y", "%Y-%m-%d", "%m/%Y", "%Y-%m")
+
+
+class CadastroInvalido(ValueError):
+    """Alteração de cadastro recusada, com mensagem para o usuário."""
+
 
 # The PDF header's "Contrato" arrives polluted, uniformly across every file seen:
 #   "06 00134/2022 - HWN ENGENHARIA LTDA Índices I0 I1 K Índices I0 I1 K"
@@ -106,34 +117,127 @@ def registrar_do_pdf(header: dict) -> int | None:
         return cur.fetchone()["id"]
 
 
-def buscar(numero: str) -> dict | None:
-    with acquire_sync() as conn:
-        cur = conn.execute("SELECT * FROM contrato WHERE numero = %s", (numero,))
-        row = cur.fetchone()
-        if not row:
-            return None
-        contrato = dict(row)
-        cur = conn.execute(
-            "SELECT familia, regiao FROM contrato_familia_regiao WHERE contrato_id = %s",
-            (contrato["id"],),
-        )
-        contrato["regioes"] = {r["familia"]: r["regiao"] for r in cur.fetchall()}
+def _com_regioes(conn, contrato: dict) -> dict:
+    cur = conn.execute(
+        "SELECT familia, regiao FROM contrato_familia_regiao WHERE contrato_id = %s",
+        (contrato["id"],),
+    )
+    contrato["regioes"] = {r["familia"]: r["regiao"] for r in cur.fetchall()}
     return contrato
 
 
-def listar() -> list[dict]:
+def buscar(numero: str) -> dict | None:
     with acquire_sync() as conn:
-        cur = conn.execute(
-            "SELECT c.*, "
-            "  (SELECT COUNT(*) FROM medicao_item m WHERE m.contrato_id = c.id) "
-            "    AS itens, "
-            "  (SELECT MIN(m.mes_medicao) FROM medicao_item m "
-            "     WHERE m.contrato_id = c.id) AS primeiro_mes, "
-            "  (SELECT MAX(m.mes_medicao) FROM medicao_item m "
-            "     WHERE m.contrato_id = c.id) AS ultimo_mes "
-            "FROM contrato c ORDER BY c.numero"
-        )
-        return [dict(r) for r in cur.fetchall()]
+        row = conn.execute("SELECT * FROM contrato WHERE numero = %s", (numero,)).fetchone()
+        return _com_regioes(conn, dict(row)) if row else None
+
+
+def buscar_por_id(contrato_id: int) -> dict | None:
+    with acquire_sync() as conn:
+        row = conn.execute("SELECT * FROM contrato WHERE id = %s", (contrato_id,)).fetchone()
+        return _com_regioes(conn, dict(row)) if row else None
+
+
+def listar(numero: str | None = None) -> list[dict]:
+    """Contratos com o resumo da tela de lista; *numero* filtra por trecho."""
+    sql = (
+        "SELECT c.*, "
+        "  (SELECT COUNT(*) FROM medicao_item m WHERE m.contrato_id = c.id) AS itens, "
+        "  (SELECT COUNT(DISTINCT m.mes_medicao) FROM medicao_item m "
+        "     WHERE m.contrato_id = c.id) AS medicoes, "
+        "  (SELECT MIN(m.mes_medicao) FROM medicao_item m "
+        "     WHERE m.contrato_id = c.id) AS primeiro_mes, "
+        "  (SELECT MAX(m.mes_medicao) FROM medicao_item m "
+        "     WHERE m.contrato_id = c.id) AS ultimo_mes "
+        "FROM contrato c"
+    )
+    params: list = []
+    if numero:
+        sql += " WHERE c.numero ILIKE %s"
+        params.append(f"%{numero.strip()}%")
+    sql += " ORDER BY c.numero"
+    with acquire_sync() as conn:
+        contratos = [_com_regioes(conn, dict(r)) for r in conn.execute(sql, params).fetchall()]
+    for contrato in contratos:
+        contrato["faltantes"] = campos_faltantes(contrato)
+    return contratos
+
+
+def _data_base(valor) -> date:
+    """A Data Base como primeiro dia do mês, a partir do que o usuário digitou."""
+    if isinstance(valor, datetime):
+        return inicio_do_mes(valor.date())
+    if isinstance(valor, date):
+        return inicio_do_mes(valor)
+    texto = str(valor or "").strip()
+    if not texto:
+        raise CadastroInvalido("A Data Base não pode ficar vazia: sem ela não há ΔP.")
+    for formato in _FORMATOS_DATA_BASE:
+        try:
+            return inicio_do_mes(datetime.strptime(texto, formato).date())
+        except ValueError:
+            continue
+    raise CadastroInvalido(f"Data Base {texto!r} ilegível; use MM/AAAA ou AAAA-MM-DD.")
+
+
+def _regioes_validas(regioes: dict | None) -> dict[str, str]:
+    """Família → grafia gravada da região, recusando o que não tem preço ANP."""
+    validas = {}
+    for familia, regiao in (regioes or {}).items():
+        if familia not in FAMILIAS:
+            raise CadastroInvalido(
+                f"Família desconhecida: {familia!r}. Use {' ou '.join(FAMILIAS)}."
+            )
+        grafia = indices_repo.normalizar_regiao(regiao)
+        if grafia is None:
+            disponiveis = indices_repo.regioes_disponiveis()
+            lista = (", ".join(disponiveis) if disponiveis
+                     else "nenhuma — importe os preços ANP primeiro")
+            raise CadastroInvalido(
+                f"Região {regiao!r} sem preços ANP do CAP 50/70. "
+                f"Regiões disponíveis: {lista}."
+            )
+        validas[familia] = grafia
+    return validas
+
+
+def atualizar(contrato_id: int, dados: dict, regioes: dict | None = None) -> bool:
+    """Grava campos do cadastro, a Data Base e as regiões, tudo ou nada.
+
+    Valida antes de abrir a transação, para que um campo errado não deixe metade
+    do formulário gravada. Devolve False quando o contrato não existe.
+    """
+    desconhecidos = sorted(set(dados) - set(CAMPOS_EDITAVEIS))
+    if desconhecidos:
+        raise CadastroInvalido(f"Campo(s) não editável(is): {', '.join(desconhecidos)}.")
+    campos = dict(dados)
+    if "extensao" in campos:
+        campos["extensao"] = _extensao(campos["extensao"])
+    if "data_base" in campos:
+        campos["data_base"] = _data_base(campos["data_base"])
+    regioes_ok = _regioes_validas(regioes)
+
+    with acquire_sync() as conn:
+        existe = conn.execute(
+            "SELECT 1 FROM contrato WHERE id = %s FOR UPDATE", (contrato_id,)
+        ).fetchone()
+        if not existe:
+            return False
+        if campos:
+            atribuicoes = ", ".join(f"{k} = %({k})s" for k in campos)
+            conn.execute(
+                f"UPDATE contrato SET {atribuicoes}, atualizado_em = now() "
+                "WHERE id = %(id)s",
+                {**campos, "id": contrato_id},
+            )
+        for familia, regiao in regioes_ok.items():
+            conn.execute(
+                "INSERT INTO contrato_familia_regiao (contrato_id, familia, regiao) "
+                "VALUES (%s, %s, %s) "
+                "ON CONFLICT (contrato_id, familia) DO UPDATE SET regiao = EXCLUDED.regiao",
+                (contrato_id, familia, regiao),
+            )
+    return True
 
 
 def _extensao(valor) -> float | None:
@@ -152,26 +256,18 @@ def _extensao(valor) -> float | None:
 
 
 def salvar_cadastro(numero: str, dados: dict) -> bool:
-    """Save the user-owned fields of a contract.
+    """Grava os campos editáveis de um contrato identificado pelo número.
 
-    Only ``CAMPOS_CADASTRO`` are accepted; ``data_base`` and ``numero_processo``
-    come from the PDF and are not editable here, so a typo in this form cannot
-    move the ΔP base month.
+    Chaves fora de ``CAMPOS_EDITAVEIS`` são ignoradas (o formulário do Dash manda
+    o que tem); a API usa ``atualizar``, que as recusa.
     """
-    campos = {k: v for k, v in dados.items() if k in CAMPOS_CADASTRO}
+    contrato = buscar(numero)
+    if contrato is None:
+        return False
+    campos = {k: v for k, v in dados.items() if k in CAMPOS_EDITAVEIS}
     if not campos:
         return False
-    if "extensao" in campos:
-        campos["extensao"] = _extensao(campos["extensao"])
-    atribuicoes = ", ".join(f"{k} = %({k})s" for k in campos)
-    campos["numero"] = numero
-    with acquire_sync() as conn:
-        cur = conn.execute(
-            f"UPDATE contrato SET {atribuicoes}, atualizado_em = now() "
-            "WHERE numero = %(numero)s",
-            campos,
-        )
-        return cur.rowcount > 0
+    return atualizar(contrato["id"], campos)
 
 
 def definir_regiao(numero: str, familia: str, regiao: str) -> None:
