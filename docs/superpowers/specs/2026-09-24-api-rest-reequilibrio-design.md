@@ -1,6 +1,6 @@
 # Subprojeto A — API REST e correção do modelo do reequilíbrio
 
-Data: 2026-09-24 · Status: aprovado em conversa, aguardando revisão da spec
+Data: 2026-09-24 · Status: aprovada
 
 ## Contexto e divisão
 
@@ -181,8 +181,14 @@ fica no `indices_repo`. Seed, API e testes usam o mesmo código. Limite de uploa
   arquivo de preços semanais da ANP");
 - dados da linha 10 até a primeira linha sem produto ou sem data serial (rodapé);
   datas seriais do Excel; `***` → NULL; valores quantizados em 5 casas;
-- **todos os produtos** do arquivo são importados (≈ 69 mil linhas); o cálculo
-  consulta só o CAP 50/70.
+- **todos os produtos** do arquivo são importados; o cálculo consulta só o
+  CAP 50/70. No arquivo oficial são 20 produtos e 60.114 registros, em cerca de
+  10 s;
+- um produto com **semana repetida** no próprio arquivo é pulado inteiro, com
+  aviso, em vez de recusar o arquivo. No arquivo oficial só o GLP se enquadra
+  (374 inícios de semana duplicados: séries distintas publicadas sob o mesmo
+  nome); recusar o arquivo impediria importar o CAP. A regra de semanas
+  sobrepostas continua valendo para os demais produtos e contra o banco.
 
 **IGP-DI (template próprio, gerado por `openpyxl`)**
 - aba `IGP-DI`: `A1 = Mês`, `B1 = Valor`; mês como célula de data (formato
@@ -204,37 +210,50 @@ fica no `indices_repo`. Seed, API e testes usam o mesmo código. Limite de uploa
 - A pergunta "Deseja sobrescrever as N alterações manuais?" é o fluxo prévia →
   gravação; a tela fica para B, a API já o suporta.
 
-**Seed** — `scripts/seed_indices.py` passa a usar os importadores: ANP de
-`data/precos-medios-ponderados-semanais-2013.xls`; IGP-DI apenas com
-`--igp-di <arquivo no formato do template>`. A planilha
-`Reequilíbrio - 26 - Contrato 716-22.xlsx` **não** é usada pelo seed.
+**Seed** — `scripts/seed_indices.py` é reescrito sobre os importadores, com
+`origem = 'seed'` e as correções manuais preservadas: ANP de `--anp <arquivo>`
+(padrão `data/precos-medios-ponderados-semanais-2013.xls`; numa máquina nova,
+`tests/fixtures/anp_semanal.xls`), `--sem-anp` para pular; IGP-DI apenas com
+`--igp-di <arquivo no formato do template>`. A opção `--todos-produtos` sai: o
+importador sempre grava todos os produtos. O seed atual lê o IGP-DI da planilha
+`Reequilíbrio - 26 - Contrato 716-22.xlsx`; o novo **não** a lê. Só
+`scripts/gerar_fixtures_e2e.py` a lê, uma vez, para gerar as fixtures.
 
 ## Testes
 
 **Fixtures** em `tests/fixtures/`, geradas uma vez e versionadas:
-- `anp_semanal.xls` — o arquivo oficial completo (≈ 2 MB, dado público);
-- `igp_di.xlsx` — no formato do template, com valores reais: aba `IGP - DI`
-  (jan/2023–jul/2026) mais jan–dez/2022 da coluna "IGP-D-MM" da aba
-  `CÁLCULO DA VARIAÇÃO DE PREÇOS` da planilha do usuário;
+- `anp_semanal.xls` — o arquivo oficial completo (≈ 2 MB, dado público),
+  versionado junto com os importadores;
+- `igp_di.xlsx` — no formato do template, com valores reais: jan/2022 (a base,
+  célula I6 da aba `CÁLCULO DA VARIAÇÃO DE PREÇOS`) mais os 43 meses da aba
+  `IGP - DI` a partir de jan/2023;
 - `delta_p_referencia.csv` — mês, ΔP CAP e ΔP Emulsões da aba
   `CÁLCULO DA VARIAÇÃO DE PREÇOS` (contrato 716-22, Data Base jan/2022,
   Nordeste): o oráculo, calculado de forma independente no Excel;
-- `contrato_ficticio.json` — itens reais de um resultado de extração já
-  processado (meses a partir de jan/2023), cabeçalho fictício (número
-  `99 99999/2099`, rodovia e contratada inventadas), Data Base real jan/2022.
+- `contrato_ficticio.json` — itens reais de jan a dez/2023 de outro contrato já
+  extraído (06 00134/2022, medições 10ª a 21ª), sob cabeçalho fictício (número
+  `99 99999/2099`, contratada inventada) com a Data Base do oráculo, jan/2022.
+
+As quatro fixtures são geradas uma vez por `scripts/gerar_fixtures_e2e.py`, a
+partir de arquivos que ficam fora do git (`tmp/`, `data/jobs/`). O teste só lê
+`tests/fixtures/`. Conferido ao escrever o plano: o ΔP CAP do oráculo, recalculado
+do arquivo da ANP pela regra do dia 15, bate com diferença zero nos 44 meses.
 
 **Ponta a ponta** — `tests/test_e2e_reequilibrio.py`, só pela API, banco real:
 1. importa ANP e IGP-DI pelos endpoints;
 2. cria o contrato processando o JSON pelo `file_processor`; completa o cadastro
    e define Nordeste nas duas famílias via `PATCH`;
-3. cria "Aquisição de CAP 50/70" e "Aquisição de Emulsão RR-1C", associa **só
-   alguns** códigos; confere que os demais ficam fora sem bloquear;
+3. remove as associações que a migração traz, cria "Aquisição de CAP 50/70" e
+   "Aquisição de Emulsão RR-1C" e associa **só** 60112 e 29083; confere que os
+   demais códigos ficam fora sem bloquear;
 4. `GET /calculo`: cada ΔP confere com o oráculo (tolerância 1e-9); colunas c, e,
    f conferem com as fórmulas do art. 16 recalculadas no teste;
 5. `GET /planilha`: fórmulas vivas em F, H, I, J; ΔP em G; equação da memória de
    cálculo presente no drawing;
 6. `?regiao_cap=Sul`: ΔP muda, nome do arquivo contém `SIMULACAO`, cadastro
-   continua Nordeste.
+   continua Nordeste;
+7. `?regiao_cap=Centro-Oeste` (sem cotação de CAP até maio/2023) → 422 com
+   `faltando`; região inexistente → 422.
 
 Se o passo 4 falhar, trata-se de divergência de regra a levar ao usuário — o
 oráculo não é ajustado para passar.
