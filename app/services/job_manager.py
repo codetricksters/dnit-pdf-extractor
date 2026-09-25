@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from ..db import acquire
+from ..db import acquire, acquire_sync
 from ..models.job import FileStatus
 from .storage import cleanup_job_files
 
@@ -104,6 +104,20 @@ async def update_file_status(
         )
 
 
+def vincular_contrato(job_id: str, filename: str, contrato_id: int, itens: int) -> None:
+    """Record which contract a processed file fed and how many items it stored.
+
+    Synchronous: it is called from ``file_processor._persistir``, which runs in
+    the executor thread alongside the synchronous repositories.
+    """
+    with acquire_sync() as conn:
+        conn.execute(
+            "UPDATE file_results SET contrato_id = %s, itens = %s "
+            "WHERE job_id = %s AND filename = %s",
+            (contrato_id, itens, job_id, filename),
+        )
+
+
 async def mark_job_completed(job_id: str) -> None:
     async with acquire() as conn:
         await conn.execute(
@@ -142,7 +156,7 @@ async def reset_file_for_retry(job_id: str, filename: str) -> None:
     async with acquire() as conn:
         await conn.execute(
             "UPDATE file_results SET status = %s, error = NULL, result_path = NULL, "
-            "started_at = NULL, completed_at = NULL "
+            "started_at = NULL, completed_at = NULL, contrato_id = NULL, itens = NULL "
             "WHERE job_id = %s AND filename = %s AND status = %s",
             (FileStatus.PENDING.value, job_id, filename, FileStatus.FAILED.value),
         )

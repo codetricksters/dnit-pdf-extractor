@@ -6,9 +6,9 @@ contra a planilha, e um float binário não é o valor que está no banco.
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 Familia = Literal["CAP", "EMULSOES"]
 
@@ -96,6 +96,20 @@ class Codigo(BaseModel):
     familia: Familia | None
 
 
+class ItemMedicao(BaseModel):
+    id: int
+    mes: date
+    codigo: str
+    descricao_pdf: str | None
+    valor_pi: Decimal
+    fator: Decimal
+    reajuste: Decimal
+    arquivo: str
+    produto_id: int | None
+    produto: str | None
+    familia: Familia | None
+
+
 class CodigoAssociado(BaseModel):
     codigo_servico: str
     descricao_pdf: str | None
@@ -108,6 +122,12 @@ class Associacao(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     produto_id: int
+
+
+class CodigosDoProduto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    codigos: list[Annotated[str, StringConstraints(pattern=CODIGO_SERVICO)]] = Field(min_length=1)
 
 
 class SemanaAnp(BaseModel):
@@ -150,6 +170,7 @@ class PeriodoCoberto(BaseModel):
     de: date | None
     ate: date | None
     registros: int
+    manuais: int
 
 
 class Cobertura(BaseModel):
@@ -232,3 +253,4 @@ class CalculoResposta(BaseModel):
     familias: list[FamiliaCalculo]
     total: Decimal
     avisos: list[str]
+    arquivo: str

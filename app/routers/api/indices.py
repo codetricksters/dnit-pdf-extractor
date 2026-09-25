@@ -93,6 +93,11 @@ async def cobertura():
 # ── ANP ─────────────────────────────────────────────────────────────────────
 
 
+@router.get("/anp/produtos", response_model=list[str])
+async def produtos_anp():
+    return await asyncio.to_thread(indices_repo.produtos_anp)
+
+
 @router.get("/anp", response_model=list[SemanaAnp])
 async def listar_anp(
     produto: str = ANP_PRODUTO_CAP,

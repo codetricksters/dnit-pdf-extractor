@@ -12,6 +12,7 @@ from .schemas import (
     Associacao,
     Codigo,
     CodigoAssociado,
+    CodigosDoProduto,
     Produto,
     ProdutoNovo,
     ProdutoPatch,
@@ -67,13 +68,23 @@ async def excluir_produto(produto_id: int):
     return Response(status_code=204)
 
 
+@router.put("/produtos/{produto_id}/codigos", response_model=Produto)
+async def associar_codigos(produto_id: int, corpo: CodigosDoProduto):
+    if not await asyncio.to_thread(catalogo.associar_codigos, produto_id, corpo.codigos):
+        raise ErroApi(404, f"Produto {produto_id} não encontrado.")
+    return await asyncio.to_thread(catalogo.buscar_produto, produto_id)
+
+
 @router.get("/codigos", response_model=list[Codigo])
 async def listar_codigos(
     q: str | None = Query(None, description="Trecho do código ou da descrição"),
     associado: bool | None = None,
+    produto_id: int | None = Query(None, description="Só os códigos deste produto"),
     limite: int = Query(500, ge=1, le=5000),
 ):
-    return await asyncio.to_thread(catalogo.buscar_codigos, q, associado, limite)
+    return await asyncio.to_thread(
+        lambda: catalogo.buscar_codigos(q, associado, limite, produto_id=produto_id)
+    )
 
 
 @router.put("/codigos/{codigo}", response_model=CodigoAssociado)

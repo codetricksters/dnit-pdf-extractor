@@ -219,6 +219,13 @@ def regioes_disponiveis(produto: str = ANP_PRODUTO_CAP) -> list[str]:
         return [r["regiao"] for r in cur.fetchall()]
 
 
+def produtos_anp() -> list[str]:
+    """Products with at least one stored week, for the ANP screen's selector."""
+    with acquire_sync() as conn:
+        cur = conn.execute("SELECT DISTINCT produto FROM anp_preco_semanal ORDER BY produto")
+        return [r["produto"] for r in cur.fetchall()]
+
+
 def _grafia(regiao: str | None, candidatas) -> str | None:
     alvo = (regiao or "").strip().casefold()
     if not alvo:
@@ -412,13 +419,16 @@ def cobertura() -> dict:
     with acquire_sync() as conn:
         anp = conn.execute(
             "SELECT MIN(vigencia_inicio) AS de, MAX(vigencia_fim) AS ate, "
-            "COUNT(*) AS registros FROM anp_preco_semanal WHERE produto = %s",
-            (ANP_PRODUTO_CAP,),
+            "COUNT(*) AS registros, "
+            "COUNT(*) FILTER (WHERE origem = %s) AS manuais "
+            "FROM anp_preco_semanal WHERE produto = %s",
+            (ORIGEM_MANUAL, ANP_PRODUTO_CAP),
         ).fetchone()
         igp = conn.execute(
-            "SELECT MIN(mes_ref) AS de, MAX(mes_ref) AS ate, COUNT(*) AS registros "
+            "SELECT MIN(mes_ref) AS de, MAX(mes_ref) AS ate, COUNT(*) AS registros, "
+            "COUNT(*) FILTER (WHERE origem = %s) AS manuais "
             "FROM indice_mensal WHERE indice = %s",
-            (INDICE_IGP_DI,),
+            (ORIGEM_MANUAL, INDICE_IGP_DI),
         ).fetchone()
         regioes = conn.execute(
             "SELECT DISTINCT regiao FROM anp_preco_semanal WHERE produto = %s "

@@ -40,6 +40,8 @@ def _job_status_dict(job: dict) -> dict:
             fname: {
                 "status": fr["status"],
                 "error": fr.get("error"),
+                "contrato_id": fr.get("contrato_id"),
+                "itens": fr.get("itens"),
             }
             for fname, fr in job["files"].items()
         },

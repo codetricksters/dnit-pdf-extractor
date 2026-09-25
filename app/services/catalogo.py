@@ -209,13 +209,16 @@ def _padrao_ilike(q: str | None) -> str | None:
 
 
 def buscar_codigos(
-    q: str | None = None, associado: bool | None = None, limite: int = 500
+    q: str | None = None,
+    associado: bool | None = None,
+    limite: int = 500,
+    produto_id: int | None = None,
 ) -> list[dict]:
     """Códigos distintos extraídos ou associados, para localizar e associar.
 
     *q* filtra código **ou** descrição do PDF, sem diferenciar maiúsculas — uma
     caixa de texto livre. *associado* restringe a associados (True) ou livres
-    (False).
+    (False); *produto_id*, aos códigos de um produto.
     """
     with acquire_sync() as conn:
         cur = conn.execute(
@@ -242,7 +245,30 @@ def buscar_codigos(
             "       OR COALESCE(e.descricao_pdf, pc.descricao_pdf) ILIKE %(padrao)s) "
             "  AND (%(associado)s::boolean IS NULL "
             "       OR (p.id IS NOT NULL) = %(associado)s) "
+            "  AND (%(produto_id)s::bigint IS NULL OR p.id = %(produto_id)s) "
             "ORDER BY c.codigo_servico LIMIT %(limite)s",
-            {"padrao": _padrao_ilike(q), "associado": associado, "limite": limite},
+            {"padrao": _padrao_ilike(q), "associado": associado,
+             "produto_id": produto_id, "limite": limite},
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+def associar_codigos(produto_id: int, codigos: list[str]) -> bool:
+    """Point several codes at one product in a single transaction.
+
+    Codes already on another product are re-pointed, like ``registrar_codigo``.
+    Returns False — and writes nothing — when the product does not exist.
+    """
+    unicos = list(dict.fromkeys(codigos))
+    with acquire_sync() as conn, conn.transaction():
+        if conn.execute(
+            "SELECT 1 FROM produto WHERE id = %s FOR UPDATE", (produto_id,)
+        ).fetchone() is None:
+            return False
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO produto_codigo (codigo_servico, produto_id) VALUES (%s, %s) "
+                "ON CONFLICT (codigo_servico) DO UPDATE SET produto_id = EXCLUDED.produto_id",
+                [(codigo, produto_id) for codigo in unicos],
+            )
+    return True

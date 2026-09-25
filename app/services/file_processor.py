@@ -1,7 +1,7 @@
 import json
 import logging
 
-from . import contratos_repo, medicoes_repo
+from . import contratos_repo, job_manager, medicoes_repo
 from .exceptions import ExtractionError
 from .extractor import extract_from_pdf, extract_header
 from .ocr_extractor import extract_from_pdf_ocr
@@ -37,6 +37,7 @@ def _persistir(result: dict, filename: str, job_id: str) -> None:
         itens = medicoes_repo.gravar_itens(
             contrato_id, result.get("rows") or [], job_id=job_id
         )
+        job_manager.vincular_contrato(job_id, filename, contrato_id, itens)
         logger.info("'%s': %d item(ns) gravado(s) no banco.", filename, itens)
     except Exception:
         logger.exception("'%s': falha ao gravar a extração no banco.", filename)

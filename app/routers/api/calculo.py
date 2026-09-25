@@ -65,7 +65,10 @@ async def calculo(
     contrato_id: int, regiao_cap: str | None = None, regiao_emulsoes: str | None = None
 ):
     resultado = await asyncio.to_thread(_calcular, contrato_id, regiao_cap, regiao_emulsoes)
-    return reequilibrio_export.serializar(resultado)
+    resposta = reequilibrio_export.serializar(resultado)
+    # O nome que a planilha terá: a tela mostra qual arquivo a simulação gera.
+    resposta["arquivo"] = nome_do_arquivo(resultado.contrato["numero"], resultado.simuladas)
+    return resposta
 
 
 @router.get("/{contrato_id}/planilha")
