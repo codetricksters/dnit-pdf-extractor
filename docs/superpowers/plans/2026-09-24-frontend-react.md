@@ -8108,7 +8108,7 @@ test('completar o cadastro, calcular, baixar e simular outra região', async ({ 
 })
 ```
 
-`getByLabel(..., { exact: true })` evita que `Trecho` case com `Subtrecho`. Os rótulos das regiões levam o asterisco de obrigatório (`Região ANP — CAP *`), por isso ficam sem `exact`.
+`getByLabel(..., { exact: true })` evita que `Trecho` case com `Subtrecho`. O asterisco de obrigatório dos rótulos de região é `aria-hidden`, então não entra no nome acessível — `getByLabel('Região ANP — CAP')` casa normalmente.
 
 - [ ] **Step 5: Spec 02 — catálogo**
 
