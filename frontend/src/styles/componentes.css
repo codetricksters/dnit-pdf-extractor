@@ -340,6 +340,7 @@
 .field-label { color: var(--text-primary); font-weight: 500; }
 .field-hint { color: var(--outline); font-size: 11px; }
 .field-required { color: var(--tertiary); }
+.field-required::before { content: '*'; }
 
 .input,
 input[type="text"],
