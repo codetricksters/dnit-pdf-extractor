@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router'
+import { BannerConexao } from './BannerConexao'
 import { Icone } from './Icone'
 
 interface Item {
@@ -72,6 +73,7 @@ export function Shell() {
         </nav>
       </aside>
       <main className="main-content">
+        <BannerConexao />
         <Outlet />
       </main>
     </div>
