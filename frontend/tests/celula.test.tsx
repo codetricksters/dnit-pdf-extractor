@@ -62,21 +62,52 @@ describe('CelulaEditavel', () => {
     expect(screen.getByRole('button', { name: 'Editar IGP-DI fev/2023' })).toHaveTextContent('1.000,5')
   })
 
-  it('vazio apaga quando há aoApagar', async () => {
+  it('vazio numa célula com valor pede confirmação antes de apagar', async () => {
     const aoApagar = vi.fn().mockResolvedValue(undefined)
     const primeiro = montar({ aoApagar })
     await primeiro.usuario.click(screen.getByRole('button', { name: 'Editar IGP-DI fev/2023' }))
     await primeiro.usuario.clear(screen.getByLabelText('IGP-DI fev/2023'))
     await primeiro.usuario.keyboard('{Enter}')
+    expect(aoApagar).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await primeiro.usuario.click(screen.getByRole('button', { name: 'Apagar' }))
     expect(aoApagar).toHaveBeenCalled()
     expect(primeiro.aoSalvar).not.toHaveBeenCalled()
   })
 
-  it('vazio com permiteVazio grava nulo', async () => {
+  it('cancelar o diálogo de apagar não grava nada e mantém o valor', async () => {
+    const aoApagar = vi.fn().mockResolvedValue(undefined)
+    const { usuario, aoSalvar } = montar({ aoApagar })
+    await usuario.click(screen.getByRole('button', { name: 'Editar IGP-DI fev/2023' }))
+    await usuario.clear(screen.getByLabelText('IGP-DI fev/2023'))
+    await usuario.keyboard('{Enter}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(aoApagar).not.toHaveBeenCalled()
+    expect(aoSalvar).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar IGP-DI fev/2023' })).toHaveTextContent('1.000,5')
+  })
+
+  it('vazio com permiteVazio numa célula com valor pede confirmação e grava nulo ao confirmar', async () => {
     const { usuario, aoSalvar } = montar({ permiteVazio: true })
     await usuario.click(screen.getByRole('button', { name: 'Editar IGP-DI fev/2023' }))
     await usuario.clear(screen.getByLabelText('IGP-DI fev/2023'))
     await usuario.keyboard('{Enter}')
+    expect(aoSalvar).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Apagar' }))
+    expect(aoSalvar).toHaveBeenCalledWith(null)
+  })
+
+  it('vazio com permiteVazio numa célula já vazia grava nulo direto, sem confirmação', async () => {
+    const { usuario, aoSalvar } = montar({ valor: null, permiteVazio: true })
+    await usuario.click(screen.getByRole('button', { name: 'Editar IGP-DI fev/2023' }))
+    await usuario.keyboard('{Enter}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(aoSalvar).toHaveBeenCalledWith(null)
   })
 })

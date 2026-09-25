@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from 'react'
 import { ErroApi } from '../api/erros'
 import type { Decimal } from '../api/tipos'
+import { ConfirmarDialogo } from './ConfirmarDialogo'
 import { exato, paraDecimal } from '../lib/formato'
 
 interface Props {
@@ -27,6 +28,12 @@ export function CelulaEditavel({ rotulo, valor, formatar, vazio = '—', manual,
   const [texto, setTexto] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const [gravando, setGravando] = useState(false)
+  const [apagando, setApagando] = useState(false)
+
+  // Vazio numa célula com valor é destrutivo (apaga o registro ou grava nulo
+  // por cima de um valor existente) e por isso pede confirmação; a mesma
+  // função serve ao ANP (aoSalvar(null)) e ao IGP-DI (aoApagar).
+  const acaoApagar = aoApagar ?? (permiteVazio ? () => aoSalvar(null) : undefined)
 
   function abrir() {
     setTexto(valor ? exato(valor) : '')
@@ -44,13 +51,18 @@ export function CelulaEditavel({ rotulo, valor, formatar, vazio = '—', manual,
       setErro(e instanceof ErroApi ? e.detail : 'Não foi possível gravar.')
     } finally {
       setGravando(false)
+      setApagando(false)
     }
   }
 
   function confirmar() {
     const limpo = texto.trim()
     if (!limpo) {
-      if (valor && aoApagar) return executar(aoApagar)
+      if (valor && acaoApagar) {
+        setEditando(false)
+        setApagando(true)
+        return
+      }
       if (permiteVazio) return executar(() => aoSalvar(null))
       setEditando(false)
       return
@@ -61,6 +73,10 @@ export function CelulaEditavel({ rotulo, valor, formatar, vazio = '—', manual,
       return
     }
     return executar(() => aoSalvar(decimal))
+  }
+
+  function apagar() {
+    if (acaoApagar) void executar(acaoApagar)
   }
 
   function tecla(e: KeyboardEvent<HTMLInputElement>) {
@@ -95,6 +111,17 @@ export function CelulaEditavel({ rotulo, valor, formatar, vazio = '—', manual,
         </button>
       )}
       {erro && <span className="celula-erro" role="alert">{erro}</span>}
+      {apagando && (
+        <ConfirmarDialogo
+          titulo="Apagar valor?"
+          mensagem={`O valor de ${rotulo} sai do banco.`}
+          rotuloConfirmar="Apagar"
+          perigoso
+          pendente={gravando}
+          aoCancelar={() => setApagando(false)}
+          aoConfirmar={apagar}
+        />
+      )}
     </td>
   )
 }

@@ -137,8 +137,38 @@ describe('Índices', () => {
     await usuario.click(screen.getByRole('button', { name: 'Editar IGP-DI fev/2023' }))
     await usuario.clear(screen.getByLabelText('IGP-DI fev/2023'))
     await usuario.keyboard('{Enter}')
+    expect(escritas.filter((e) => e.metodo === 'DELETE')).toHaveLength(0)
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent('IGP-DI fev/2023')
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Apagar' }))
     expect(escritas.at(-1)).toMatchObject({ metodo: 'DELETE' })
     expect(escritas.at(-1)!.url).toContain('/igp-di/2023-02')
     expect(screen.getByRole('link', { name: 'Baixar template' })).toHaveAttribute('href', '/api/v1/indices/igp-di/template')
+  })
+
+  it('apagar o valor de uma célula do ANP pede confirmação antes de gravar nulo', async () => {
+    const escritas = preparar()
+    const { usuario } = renderApp('/indices/anp')
+    const linha = (await screen.findByText('08/01 – 14/01/2023')).closest('tr')!
+    await usuario.click(within(linha).getByRole('button', { name: 'Editar Nordeste 08/01 – 14/01/2023' }))
+    await usuario.clear(screen.getByLabelText('Nordeste 08/01 – 14/01/2023'))
+    await usuario.keyboard('{Enter}')
+    expect(escritas.filter((e) => e.metodo === 'PUT')).toHaveLength(0)
+    const dialogo = screen.getByRole('dialog')
+    expect(dialogo).toHaveTextContent('Nordeste 08/01 – 14/01/2023')
+
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(escritas).toHaveLength(0)
+    expect(within(linha).getByRole('button', { name: 'Editar Nordeste 08/01 – 14/01/2023' })).toHaveTextContent('3,61475')
+
+    await usuario.click(within(linha).getByRole('button', { name: 'Editar Nordeste 08/01 – 14/01/2023' }))
+    await usuario.clear(screen.getByLabelText('Nordeste 08/01 – 14/01/2023'))
+    await usuario.keyboard('{Enter}')
+    await usuario.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Apagar' }))
+    expect(escritas.at(-1)).toMatchObject({
+      metodo: 'PUT',
+      corpo: { produto: CAP, regiao: 'Nordeste', vigencia_inicio: '2023-01-08', vigencia_fim: '2023-01-14', preco: null },
+    })
   })
 })
