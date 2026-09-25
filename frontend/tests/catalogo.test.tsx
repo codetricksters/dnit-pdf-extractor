@@ -74,6 +74,21 @@ describe('Catálogo', () => {
     expect(await screen.findByText(/Nenhum produto ainda/)).toBeInTheDocument()
   })
 
+  it('?q= sem produto nenhum avisa em vez de ignorar o deep link em silêncio', async () => {
+    preparar([])
+    renderApp('/catalogo?q=60112')
+    expect(await screen.findByText(/Nenhum produto ainda/)).toBeInTheDocument()
+    expect(screen.getByText(/Não é possível abrir "Adicionar códigos" para o código 60112/)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('?produto=<id inexistente> avisa e cai no primeiro produto, em vez de trocar em silêncio', async () => {
+    preparar()
+    renderApp('/catalogo?produto=999')
+    expect(await screen.findByText('Produto não encontrado.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Aquisição de CAP 50/70' })).toBeInTheDocument()
+  })
+
   it('cria um produto', async () => {
     const escritas = preparar()
     const { usuario } = renderApp('/catalogo')

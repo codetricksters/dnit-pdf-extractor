@@ -24,9 +24,12 @@ export function PaginaCatalogo() {
   const produtos = useQuery({ queryKey: chaves.produtos, queryFn: listarProdutos })
 
   const lista = produtos.data ?? []
-  const idUrl = Number(busca.get('produto'))
-  const selecionado = lista.find((p) => p.id === idUrl) ?? lista[0]
+  const produtoParam = busca.get('produto')
+  const idUrl = produtoParam !== null ? Number(produtoParam) : null
+  const selecionado = (idUrl !== null ? lista.find((p) => p.id === idUrl) : undefined) ?? lista[0]
+  const produtoNaoEncontrado = idUrl !== null && lista.length > 0 && selecionado?.id !== idUrl
   const buscaCodigo = busca.get('q')
+  const semProdutoParaAdicionar = buscaCodigo !== null && lista.length === 0
 
   const codigos = useQuery({
     queryKey: chaves.codigos({ produtoId: selecionado?.id }),
@@ -84,6 +87,19 @@ export function PaginaCatalogo() {
             <p className="notice-text">
               Crie um produto para cada material que entra no reequilíbrio (CAP ou emulsão) e associe a ele os
               códigos de serviço dos PDFs.
+              {semProdutoParaAdicionar &&
+                ` Não é possível abrir "Adicionar códigos" para o código ${buscaCodigo || '(vazio)'} sem um produto.`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {produtoNaoEncontrado && (
+        <div className="notice warn">
+          <div>
+            <p className="notice-title">Produto não encontrado.</p>
+            <p className="notice-text">
+              O produto de id {idUrl} não existe mais; mostrando {selecionado!.descricao_export}.
             </p>
           </div>
         </div>
