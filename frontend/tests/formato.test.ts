@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  data, dataHora, deltaP, dinheiro, exato, fator, mesAno, negativo, paraDecimal, percentual, semana,
+  data, dataHora, deltaP, dinheiro, exato, fator, mesAno, negativo, paraDecimal, percentual, semana, tamanho,
 } from '../src/lib/formato'
 
 describe('números', () => {
@@ -76,5 +76,13 @@ describe('entrada do usuário', () => {
     for (const texto of ['', '  ', 'abc', '1,2,3', '1.234,5.6', '--1']) {
       expect(paraDecimal(texto)).toBeNull()
     }
+  })
+})
+
+describe('tamanho', () => {
+  it('KB até 1 MB, MB com uma casa depois', () => {
+    expect(tamanho(200)).toBe('1 KB')
+    expect(tamanho(48 * 1024)).toBe('48 KB')
+    expect(tamanho(3.25 * 1024 * 1024)).toBe('3,3 MB')
   })
 })

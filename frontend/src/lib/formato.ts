@@ -102,3 +102,9 @@ export function paraDecimal(texto: string): string | null {
   }
   return /^-?\d+(\.\d+)?$/.test(t) ? t : null
 }
+
+// Tamanho de arquivo para listas e para a área de upload.
+export function tamanho(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
+}

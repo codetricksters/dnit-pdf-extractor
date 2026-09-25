@@ -10,6 +10,7 @@ import { ListaContratos } from './pages/contratos/ListaContratos'
 import { GradeAnp } from './pages/indices/GradeAnp'
 import { GradeIgpDi } from './pages/indices/GradeIgpDi'
 import { PaginaIndices } from './pages/indices/PaginaIndices'
+import { PaginaUpload } from './pages/upload/PaginaUpload'
 
 export function AppRoutes() {
   return (
@@ -28,6 +29,7 @@ export function AppRoutes() {
           <Route path="anp" element={<GradeAnp />} />
           <Route path="igp-di" element={<GradeIgpDi />} />
         </Route>
+        <Route path="upload" element={<PaginaUpload />} />
         <Route path="*" element={<NaoEncontrado />} />
       </Route>
     </Routes>
