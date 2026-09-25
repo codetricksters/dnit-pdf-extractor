@@ -77,7 +77,7 @@
 
 .file-row-name { display: block; font-family: var(--font-data); color: var(--text-primary); }
 .file-row-note { display: block; font-size: 12px; color: var(--text-secondary); font-family: var(--font-body); }
-tr.status-failed td { background: rgba(147, 0, 10, 0.18); }
+tr.status-failed td { background: var(--error-container-subtle); }
 
 .progress-inline {
   display: flex;

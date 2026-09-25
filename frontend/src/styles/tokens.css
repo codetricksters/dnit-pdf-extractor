@@ -135,4 +135,15 @@ a { color: inherit; text-decoration: none; }
   --scrim: rgb(0 0 0 / 0.6);
   --dialog-width: 36rem;
   --cell-min-width: 7rem;
+
+  /* Texto/ícone sobre um botão de fundo sólido (--accent-primary, --critical). */
+  --on-accent: #ffffff;
+  /* Hover de .btn-primary — um azul mais claro que --accent-primary. */
+  --accent-primary-hover: #0a74ee;
+  /* Anel de .btn-ok — --success com transparência. */
+  --success-ring: rgba(74, 222, 128, 0.4);
+  /* Faixa alternada da data-table — --surface-container-low com transparência. */
+  --surface-stripe: rgba(13, 28, 45, 0.55);
+  /* Fundo da linha "Falhou" na tabela de upload — --error-container com transparência. */
+  --error-container-subtle: rgba(147, 0, 10, 0.18);
 }
