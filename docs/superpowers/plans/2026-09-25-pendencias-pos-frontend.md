@@ -47,13 +47,48 @@
 8. **`.dockerignore` não exclui `.env` nem `data/`.** A imagem Docker pode levar
    o `.env` local (senha do banco) e o conteúdo de `data/` (artefatos de
    extração, backups) para dentro do build context. Adicionar as duas entradas.
-9. **Política de linhas duplicadas dentro de um mesmo PDF não está decidida.**
-   `medicoes_repo.gravar_itens` já deduplica entre arquivos diferentes via
-   `UNIQUE (contrato_id, codigo_servico, mes_medicao, source_file)`, mas não há
-   uma decisão registrada sobre o que fazer quando o **mesmo PDF** produz duas
-   linhas para o mesmo `codigo_servico`/mês (erro de extração vs. dado legítimo
-   do PDF?). Precisa de decisão de negócio antes de codar — ver seção
-   "Perguntas para o usuário" abaixo.
+9. **Bug confirmado com dados reais: perda de dinheiro quando um código de
+   produto se repete no mesmo PDF/mês.** `medicoes_repo.gravar_itens` deduplica
+   via `UNIQUE (contrato_id, codigo_servico, mes_medicao, source_file)` com
+   `ON CONFLICT ... DO UPDATE` — a **última** linha processada sobrescreve as
+   anteriores. Analisando os 51 PDFs reais fornecidos em `tmp/` (24/09/2026),
+   dos códigos hoje associados a um produto do catálogo (CAP/emulsões, os que
+   entram no ΔP), **22 casos em 51 arquivos** têm o mesmo código com valores
+   financeiros diferentes e reais dentro do mesmo mês — a soma do que é
+   descartado hoje chega a **R$ 2.998.897,12** de "Valor a PI Líquido" nesses
+   22 casos.
+
+   Causa raiz: o mesmo material recorre em mais de um **grupo de serviço** do
+   PDF (ex.: "8,0 - AQUISIÇÃO … BETUMINOSO" → "8,1 - … PREÇOS NOVOS" → "21,0 -
+   … NOVA ETAPA" quando o contrato é reajustado/re-baseado), e ainda numa
+   seção de estorno ("23,0 - ESTORNOS/RESSARCIMENTOS/DESCONTOS", linhas
+   "EST.QTDE.LQDA. …" com valor sempre zero). A chave de identidade da linha
+   não inclui o grupo, então tudo colide na mesma linha do banco.
+
+   **Exemplo completo verificado** — `tmp/45ª MP.pdf`, código `60112`
+   (AQUISIÇÃO DE CAP 50/70), 7 ocorrências no mesmo arquivo:
+
+   | Grupo (página) | O que é | Valor a PI Líquido |
+   |---|---|---|
+   | `8,0 - AQUISIÇÃO E TRANSPORTE DE MATERIAL BETUMINOSO` (pág. 3) | etapa antiga do contrato | R$ 0,00 |
+   | `8,1 - … PREÇOS NOVOS` (pág. 3) | reprecificação da mesma etapa | R$ 0,00 |
+   | `21,0 - … NOVA ETAPA` (pág. 5) | **a medição real deste mês** | **R$ 107.346,52** |
+   | `23,0 - ESTORNOS/RESSARCIMENTOS/DESCONTOS` (pág. 5-6, 4 linhas) | linhas "EST.QTDE.LQDA. 8,0 60112"/"8,1 60112", auditoria, valor zero | R$ 0,00 cada |
+
+   O grupo `23,0` vem depois do `21,0` na leitura do PDF; a última linha
+   processada é uma das de estorno (zero), que sobrescreve os R$ 107.346,52
+   reais — o banco fica com R$ 0,00 para esse material naquele mês. Outro
+   exemplo (dois grupos reais, sem estorno): `tmp/10ª MEDIÇÃO PROVISÓRIA.pdf`,
+   código `8300980`, grupo `2,0 - CONSERVAÇÃO CORRETIVA ROTINEIRA` (R$
+   145.178,70) e grupo `3,0 - CONSERVAÇÃO PREVENTIVA PERIÓDICA` (R$
+   197.208,20) — hoje só o segundo valor é gravado; a soma real é R$
+   342.386,90.
+
+   **Status: pendente de decisão do usuário.** Ele vai validar o achado
+   (revisando os PDFs de origem) antes de escolher entre as opções discutidas
+   (somar por código+mês, sem migração; ou incluir o grupo na chave, com
+   migração e mudança no extractor/reequilibrio_export/tela de Medições).
+   Nada foi alterado no código ainda.
 10. **Branch remoto `feat/postgres-indices-delta-p` continua existindo** em
     `origin`, aparentemente já superado pelo trabalho atual. Confirmar que pode
     ser removido antes de apagar.
@@ -72,9 +107,8 @@
 
 ## Perguntas para o usuário
 
-- Item 9 precisa de uma decisão de negócio antes de qualquer código: quando o
-  **mesmo PDF** tem duas linhas para o mesmo `codigo_servico` no mesmo mês,
-  isso deveria ser: (a) um erro 422 que recusa o arquivo, (b) manter a última
-  linha (comportamento atual do `ON CONFLICT ... DO UPDATE`, silencioso), ou
-  (c) somar/registrar as duas como medições distintas? Depende de como o PDF
-  real do DNIT costuma representar isso.
+- Item 9: usuário está validando o achado por conta própria antes de decidir
+  entre "somar por código+mês" e "incluir o grupo na chave" (ver detalhes no
+  item 9 acima). Não prosseguir com código até ele voltar com a decisão.
+- Item 10: ainda não decidido se remove o branch remoto
+  `feat/postgres-indices-delta-p` agora ou depois.
