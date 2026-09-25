@@ -1,0 +1,29 @@
+/* Portado de app/static/css/style.css (fontes, linhas 17-42). Cores e tamanhos
+ * novos vão em tokens.css, nunca inline. */
+
+/* ------------------------------------------------------------- 0. Fontes */
+
+/* Self-hosted — see app/static/fonts/. No CDN dependency at runtime. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../fonts/inter-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/material-symbols-outlined.woff2') format('woff2');
+}

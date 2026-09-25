@@ -1,0 +1,389 @@
+/* Portado de app/static/css/style.css (blocos, linhas 380-760, e .alert, linhas 942-946). Cores e tamanhos
+ * novos vão em tokens.css, nunca inline. */
+
+/* ------------------------------------------------------------------ 3. Blocks */
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.page-crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.page-crumb .material-symbols-outlined { font-size: 16px; color: var(--accent-primary); }
+.page-crumb .sep { color: var(--outline); }
+.page-crumb .current { color: var(--text-primary); }
+
+.page-title { font-size: 28px; line-height: 36px; font-weight: 600; color: var(--text-primary); }
+.page-subtitle { font-size: 13px; color: var(--text-secondary); max-width: 52rem; margin-top: 2px; }
+
+.page-actions { display: flex; align-items: center; gap: var(--space-sm); flex-shrink: 0; }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-md);
+}
+
+.stat-card {
+  padding: var(--space-md);
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-low);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.stat-body { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.stat-value { display: flex; align-items: baseline; gap: var(--space-xs); }
+.stat-value .num-strong { font-size: 22px; line-height: 28px; color: var(--text-primary); }
+.stat-note { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+.stat-note .material-symbols-outlined { font-size: 14px; color: var(--primary); }
+
+.stat-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-lg);
+  background: var(--surface-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-icon .material-symbols-outlined { font-size: 24px; color: var(--primary); }
+.stat-icon.ok .material-symbols-outlined { color: var(--success); }
+.stat-icon.warn .material-symbols-outlined { color: var(--tertiary); }
+
+.meter {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-container-highest);
+  overflow: hidden;
+}
+
+.meter > span { display: block; height: 100%; background: var(--primary); border-radius: var(--radius-full); }
+.meter.ok > span { background: var(--success); }
+.meter.warn > span { background: var(--tertiary); }
+
+/* A panel is the generic surface: title row, body, optional footer. */
+.panel {
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-low);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.panel-head {
+  padding: var(--space-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.panel-title .material-symbols-outlined { color: var(--primary); }
+.panel-subtitle { font-size: 13px; color: var(--text-secondary); }
+.panel-body { padding: 0 var(--space-md) var(--space-md); }
+.panel-body.flush { padding: 0; }
+
+.panel-foot {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-container);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* The per-product subtotal row and the grand total below it — same accent
+ * border the exported spreadsheet uses for these rows (reequilibrio_layout.py). */
+.panel-foot.subtotal {
+  background: var(--surface-container-high);
+  border-top: 1px solid var(--accent-secondary);
+  border-bottom: 1px solid var(--accent-secondary);
+  font-weight: 600;
+}
+
+.batch-actions.grand-total {
+  background: var(--surface-container-highest);
+  border-top: 2px solid var(--accent-secondary);
+  padding: var(--space-lg) var(--space-md);
+}
+
+.batch-actions.grand-total .num-strong { font-size: 16px; }
+
+/* The blocking notice: an orange rail, the reason, and the buttons that fix it. */
+.notice {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--tertiary);
+  background: var(--surface-container-low);
+}
+
+.notice-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notice-title { font-size: 18px; font-weight: 600; color: var(--tertiary); }
+.notice-text { font-size: 13px; color: var(--text-secondary); margin-top: var(--space-xs); }
+.notice-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
+
+.notice.ok { border-left-color: var(--success); }
+.notice.ok .notice-icon { background: var(--surface-container); color: var(--success); }
+.notice.ok .notice-title { color: var(--success); }
+
+.notice.danger { border-left-color: var(--critical); background: var(--critical-subtle); }
+.notice.danger .notice-icon { background: var(--error-container); color: var(--on-error-container); }
+.notice.danger .notice-title { color: var(--critical); }
+
+.notice.info { border-left-color: var(--accent-primary); }
+.notice.info .notice-icon { background: var(--surface-container); color: var(--primary); }
+.notice.info .notice-title { color: var(--primary); }
+
+/* Badges: status without relying on colour alone — each carries a word. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface-container-highest);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.badge .material-symbols-outlined { font-size: 14px; }
+.badge-ok, .badge-completed { background: var(--success-subtle); color: var(--success); }
+.badge-warn, .badge-pending { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.badge-danger, .badge-failed { background: var(--critical-subtle); color: var(--critical); }
+.badge-info, .badge-processing { background: var(--surface-container); color: var(--accent-secondary); }
+.badge-mono { font-family: var(--font-data); }
+
+/* Buttons. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: 8px var(--space-md);
+  border: 0;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  background: var(--surface-container-high);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn:hover { background: var(--surface-container-highest); }
+.btn .material-symbols-outlined { font-size: 18px; }
+
+.btn-primary { background: var(--accent-primary); color: #ffffff; }
+.btn-primary:hover { background: #0a74ee; }
+
+.btn-ok { background: var(--surface-container); color: var(--success); box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.4); }
+.btn-ok:hover { background: var(--surface-container-high); }
+
+.btn-danger { background: var(--error-container); color: #ffffff; box-shadow: inset 0 0 0 1px var(--critical); }
+.btn-danger:hover { background: var(--critical); }
+
+.btn-sm { padding: 4px var(--space-sm); font-size: 12px; }
+.btn-icon { padding: 6px; border-radius: var(--radius-lg); }
+
+.btn:disabled,
+.btn.disabled {
+  background: var(--surface-container);
+  color: var(--outline);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Dense data tables: right-aligned monospace numerals, sticky header. */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-container-highest);
+  color: var(--accent-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: right;
+  padding: 10px var(--space-sm);
+  white-space: pre-line;
+}
+
+.data-table th:first-child,
+.data-table th.left,
+.data-table td:first-child,
+.data-table td.left { text-align: left; }
+
+.data-table td {
+  height: var(--row-height);
+  padding: 6px var(--space-sm);
+  border-top: 1px solid var(--border-structural);
+  text-align: right;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+.data-table td.left { font-family: var(--font-body); }
+.data-table tbody tr:nth-child(even) { background: rgba(13, 28, 45, 0.55); }
+.data-table tbody tr:hover { background: var(--surface-container); }
+
+.data-table tr.group td {
+  background: var(--surface-container);
+  color: var(--accent-secondary);
+  font-family: var(--font-body);
+  font-weight: 600;
+  text-align: left;
+  letter-spacing: 0.02em;
+}
+
+.data-table tr.subtotal td {
+  height: var(--row-height-subtotal);
+  background: var(--surface-container-high);
+  font-weight: 600;
+  border-top: 1px solid var(--accent-secondary);
+  border-bottom: 1px solid var(--accent-secondary);
+}
+
+.data-table tr.total td {
+  height: var(--row-height-total);
+  background: var(--surface-container-highest);
+  font-size: 16px;
+  font-weight: 700;
+  border-top: 2px solid var(--accent-secondary);
+}
+
+.table-scroll { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
+
+.cell-title { font-family: var(--font-body); color: var(--text-primary); }
+.cell-note { font-family: var(--font-data); font-size: 11px; color: var(--outline); }
+
+.empty-state {
+  padding: var(--space-xl) var(--space-md);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* Forms. */
+.field { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: 12px;
+}
+
+.field-label { color: var(--text-primary); font-weight: 500; }
+.field-hint { color: var(--outline); font-size: 11px; }
+.field-required { color: var(--tertiary); }
+
+.input,
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+  width: 100%;
+  padding: 8px var(--space-sm);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-container-high);
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: 13px;
+}
+
+.input,
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+  height: 34px;
+}
+
+.input:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.input:disabled, .input[readonly] { color: var(--text-secondary); background: var(--surface-container); }
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-md);
+}
+
+.inline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-md); }
+.alert { border: 0; border-radius: var(--radius-lg); font-size: 13px; }
+.alert-success { background: var(--surface-container); color: var(--success); }
+.alert-warning { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.alert-danger { background: var(--error-container); color: var(--on-error-container); }
+.alert-secondary, .alert-dark { background: var(--surface-container); color: var(--text-secondary); }

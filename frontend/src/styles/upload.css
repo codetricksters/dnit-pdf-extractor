@@ -1,0 +1,93 @@
+/* Portado de app/static/css/style.css (upload, linhas 762-851). Cores e tamanhos
+ * novos vão em tokens.css, nunca inline. */
+
+/* --------------------------------------------------------------- 4. Upload */
+
+.dropzone {
+  position: relative;
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-low);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-xl) var(--space-lg);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+
+.dropzone:hover,
+.dropzone.over {
+  background: var(--surface-container);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.dropzone input[type="file"] { display: none; }
+
+.dropzone-icon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius-xl);
+  background: var(--surface-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dropzone-icon .material-symbols-outlined { font-size: 32px; color: var(--primary); }
+.dropzone-title { font-size: 22px; font-weight: 600; color: var(--text-primary); }
+.dropzone-text { font-size: 13px; color: var(--text-secondary); max-width: 44rem; }
+
+.dropzone-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.dropzone-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dropzone-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.dropzone-meta .material-symbols-outlined { font-size: 14px; }
+
+.batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-low);
+  box-shadow: var(--shadow-sm);
+}
+
+.batch-actions-group { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+
+.file-row-name { display: block; font-family: var(--font-data); color: var(--text-primary); }
+.file-row-note { display: block; font-size: 12px; color: var(--text-secondary); font-family: var(--font-body); }
+tr.status-failed td { background: rgba(147, 0, 10, 0.18); }
+
+.progress-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+.progress-inline .meter { width: 6rem; }
+
+.status-message { font-size: 13px; color: var(--text-secondary); }
+.status-message.error { color: var(--error); }
+.status-message.success { color: var(--success); }

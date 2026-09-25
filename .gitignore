@@ -271,3 +271,13 @@ pip-selfcheck.json
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,microsoftoffice,python,jupyternotebooks,virtualenv,dotenv
 .claude/worktrees/
 .worktrees/
+
+# Frontend React
+node_modules/
+frontend/test-results/
+frontend/playwright-report/
+# As regras "lib/" e "[Ll]ib" acima são de pacotes Python; esta pasta é código-fonte.
+!/frontend/src/lib/
+
+# Rascunhos das skills (brainstorm, planos em execução)
+.superpowers/

@@ -1,0 +1,138 @@
+/* Portado de app/static/css/style.css (tokens, reset e utilitários, linhas 44-171). Cores e tamanhos
+ * novos vão em tokens.css, nunca inline. */
+
+/* ------------------------------------------------------------------ 1. Tokens */
+
+:root {
+  /* Surfaces — "Audit Precision Dark" (ver a sessão do Stitch citada no plano). */
+  --surface-base: #020617;
+  --surface: #0c1324;
+  --surface-container-lowest: #070d1f;
+  --surface-container-low: #051424;
+  --surface-container: #0d1c2d;
+  --surface-container-high: #122131;
+  --surface-container-highest: #1c2b3c;
+  --surface-bright: #33394c;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-disabled: #64748b;
+  --on-surface: #dce1fb;
+  --on-surface-variant: #c2c6d6;
+
+  --primary: #aec6ff;
+  --on-primary: #002e6a;
+  --primary-container: #0566d9;
+  --on-primary-container: #e6ecff;
+  --accent-primary: #0566d9;
+  --accent-secondary: #38bdf8;
+
+  --tertiary: #eab308;
+  --tertiary-container: #422006;
+  --on-tertiary-container: #fef3c7;
+
+  --error: #ffb4ab;
+  --error-container: #93000a;
+  --on-error-container: #ffdad6;
+
+  --critical: #ef4444;
+  --critical-subtle: #450a0a;
+
+  --success: #22c55e;
+  --success-subtle: #052e16;
+
+  --outline: #8c909f;
+  --outline-variant: #424754;
+  --border-subtle: #1e3a5f;
+  --border-strong: #334e68;
+  --border-structural: #45464d;
+
+  --radius: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+  --radius-full: 0.75rem;
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --gutter: 1rem;
+
+  --sidebar-width: 18rem;
+  --header-height: 5rem;
+
+  --row-height: 32px;
+  --row-height-subtotal: 36px;
+  --row-height-total: 40px;
+
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-data: 'JetBrains Mono', ui-monospace, monospace;
+
+  --shadow-sm: 0 1px 8px rgba(0, 0, 0, 0.04);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html { color-scheme: dark; }
+
+body {
+  background: var(--surface-base);
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 18px;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overscroll-behavior: none;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+.hidden { display: none !important; }
+
+.mt-sm { margin-top: var(--space-sm); }
+.mt-md { margin-top: var(--space-md); }
+.mt-lg { margin-top: var(--space-lg); }
+
+/* Typography scale, named as in the proposal. */
+.headline-lg { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.01em; }
+.headline-md { font-size: 22px; line-height: 28px; font-weight: 600; }
+.headline-sm { font-size: 18px; line-height: 24px; font-weight: 500; }
+.body-lg { font-size: 15px; line-height: 22px; }
+.body-md { font-size: 13px; line-height: 18px; }
+.body-sm { font-size: 12px; line-height: 16px; }
+.label-md {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.label-caps { text-transform: uppercase; letter-spacing: 0.08em; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.num-strong { font-family: var(--font-data); font-weight: 600; font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-secondary); }
+.faint { color: var(--outline); }
+.pos { color: var(--success); }
+.neg { color: var(--error); }
+
+/* Tokens novos do frontend React. */
+:root {
+  --scrim: rgb(0 0 0 / 0.6);
+  --dialog-width: 36rem;
+  --cell-min-width: 7rem;
+}

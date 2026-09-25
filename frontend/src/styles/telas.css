@@ -1,0 +1,121 @@
+/* Estilos das telas React que não existiam no style.css do Jinja.
+ * Só tokens de tokens.css; nada de cor ou tamanho solto. */
+
+/* Abas com rota própria (contrato, índices). */
+.tabs { display: flex; gap: var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
+.tab {
+  padding: var(--space-sm) 0;
+  margin-bottom: -1px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--text-primary); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+
+/* Avisos: .notice sem modificador já é o amarelo; .warn deixa isso explícito. */
+.notice.warn { border-left-color: var(--tertiary); }
+.banner-conexao { position: sticky; top: 0; z-index: 40; }
+
+/* Barra de filtros e ações acima das tabelas. */
+.barra { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-md); }
+.barra .espaco { flex: 1; }
+.contagem { font-size: 13px; color: var(--text-secondary); }
+
+/* Faixa de cobertura dos índices. */
+.faixa {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-container-low);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.faixa strong { color: var(--text-primary); }
+
+/* Células editáveis das grades de índices. */
+.celula { cursor: pointer; }
+.celula:hover { background: var(--surface-container-high); }
+.celula.manual { box-shadow: inset 3px 0 0 var(--tertiary); }
+.celula.vazia { color: var(--text-disabled); }
+.celula .input { width: 100%; min-width: var(--cell-min-width); text-align: right; font-family: var(--font-data); }
+.celula-erro { display: block; color: var(--error); font-size: 12px; white-space: normal; text-align: left; }
+.marca-manual {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  margin-right: var(--space-xs);
+  vertical-align: middle;
+  background: var(--tertiary);
+}
+
+/* Diálogo modal. */
+.dialogo-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scrim);
+}
+.dialogo {
+  width: min(var(--dialog-width), 92vw);
+  max-height: 90vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-container-low);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+}
+.dialogo-titulo { padding: var(--space-md); font-size: 18px; font-weight: 600; border-bottom: 1px solid var(--border-subtle); }
+.dialogo-corpo { padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-md); }
+.dialogo-acoes {
+  padding: var(--space-md);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Catálogo: lista de produtos à esquerda, produto à direita. */
+.duas-colunas { display: grid; grid-template-columns: minmax(16rem, 1fr) 3fr; gap: var(--space-lg); align-items: start; }
+.lista-produtos { display: flex; flex-direction: column; gap: 2px; }
+
+/* Importação em dois passos. */
+.passos { display: flex; gap: var(--space-sm); }
+.passo {
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-full);
+  background: var(--surface-container-high);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.passo.active { background: var(--primary-container); color: var(--on-primary-container); }
+.cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-sm); }
+.cartao {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-container);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.cartao strong { display: block; font-family: var(--font-data); font-size: 22px; color: var(--text-primary); }
+.cartao.warn strong { color: var(--tertiary); }
+
+/* Mensagens de erro. */
+.erro-campo { color: var(--error); font-size: 12px; }
+.lista-erros { margin: var(--space-xs) 0 0 var(--space-md); padding: 0; font-size: 13px; }
+.pre-linha { white-space: pre-line; }
+
+select.input { appearance: auto; }
+details.lotes > summary { cursor: pointer; color: var(--text-secondary); }
+
+@media (max-width: 1024px) {
+  .duas-colunas { grid-template-columns: 1fr; }
+  .cartoes { grid-template-columns: repeat(2, 1fr); }
+}
