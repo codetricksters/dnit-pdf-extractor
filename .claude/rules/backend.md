@@ -92,6 +92,11 @@ query.
 `itens_para_export` returns the rows joined to the catalogue — only associated
 codes. `gravar_itens` returns the number of items stored.
 
+`listar_itens(contrato_id, mes=None, no_calculo=None, q=None)` serves the
+*Medições* tab: every extracted item of the contract with its associated product
+(or none), `no_calculo` filtering on whether the code has one, `q` matching code
+or description with `ILIKE`.
+
 ### catalogo.py
 
 The **service code** is the key, not the description: a code maps to exactly one
@@ -106,8 +111,11 @@ at one product.
 - `registrar_codigo(codigo, produto_id)` associates or re-points a code, even one
   not yet extracted; `desassociar_codigo(codigo)` removes it. Associations are
   retroactive: `medicao_item` keeps every extracted item.
-- `buscar_codigos(q, associado, limite)` — distinct extracted codes, `q` filtering
-  code **or** description with `ILIKE '%q%'`.
+- `buscar_codigos(q, associado, limite, produto_id)` — distinct extracted codes,
+  `q` filtering code **or** description with `ILIKE '%q%'`, `produto_id` to one
+  product's codes.
+- `associar_codigos(produto_id, codigos)` associates or re-points several codes
+  in one transaction; `False` when the product does not exist.
 
 ### indices_repo.py
 
@@ -124,8 +132,10 @@ it per line, and `EXCLUDE USING gist (… daterange(vigencia_inicio, vigencia_fi
 
 `buscar_preco_anp(produto, regiao, mes)` resolves a month to the weekly row whose
 vigência contains **day 15** (`_dia_de_referencia`); `cobertura()` returns
-`{"anp": {de, ate, registros}, "igp_di": {…}, "regioes": [...]}`. `FonteBanco`
-caches per instance — one export asks for the same base month on every line.
+`{"anp": {de, ate, registros, manuais}, "igp_di": {…}, "regioes": [...]}`.
+`produtos_anp()` lists the distinct ANP products in the database (the filter of
+the ANP grid). `FonteBanco` caches per instance — one export asks for the same
+base month on every line.
 
 ### importadores.py / importacao.py / exportadores.py
 
@@ -245,15 +255,19 @@ verbatim by the routers and callbacks.
 
 ### upload.py
 
-`GET /` renders `index.html`. `POST /upload` reads each file in memory, saves it
-under `STORAGE_PATH`, creates a job and returns `{"job_id": …}` immediately; the
-files are processed in background tasks. `file_processor` writes the JSON artefact
-and then persists the contract (`contratos_repo.registrar_do_pdf`) and the items
-(`medicoes_repo.gravar_itens`).
+`POST /upload` reads each file in memory, saves it under `STORAGE_PATH`, creates
+a job and returns `{"job_id": …}` immediately; the files are processed in
+background tasks. `file_processor` writes the JSON artefact and then persists the
+contract (`contratos_repo.registrar_do_pdf`) and the items
+(`medicoes_repo.gravar_itens`), and records on the file which contract it fed and
+how many items it stored (`job_manager.vincular_contrato`, migration 007). `GET /`
+is no longer here: the SPA serves it.
 
 ### jobs.py
 
-Status, an SSE stream of changes, per-file and zipped result downloads, and retry.
+Status, an SSE stream of changes, per-file and zipped result downloads, and
+retry. Each file in the status carries `contrato_id` and `itens` once persisted,
+which is how the upload screen links a result to its contract.
 
 ### admin.py
 
@@ -277,6 +291,13 @@ or `erros`. Contracts are addressed by numeric `id`; `GET /contratos?numero=`
 finds one by number. Index uploads are capped at 20 MB (413). The `X-Avisos`
 header (`calculo.py`) is sanitised to latin-1, since HTTP headers only accept it.
 
+Endpoints that exist for the React interface: `GET /contratos/{id}/medicoes?mes=&no_calculo=&q=`
+(404 for an unknown contract), `GET /codigos?produto_id=`,
+`PUT /produtos/{id}/codigos` with `{"codigos": [...]}` (404 for an unknown
+product), `GET /indices/anp/produtos`, `manuais` in each series of
+`GET /indices/cobertura`, and `arquivo` in the cálculo JSON — the filename the
+spreadsheet download would get, so the screen can show it during a simulation.
+
 Two different shapes of 422 reach the client, and there is no global exception
 handler smoothing them into one — callers must expect both:
 
@@ -290,6 +311,9 @@ handler smoothing them into one — callers must expect both:
   `erros` (importação de índices).
 
 ## Dashboard
+
+Frozen: kept mounted and working, off the menu, receiving no new features; the
+React interface replaces it.
 
 `layout.py` builds only the shell; each tab's content is rendered by a callback
 through `views.py`, so the screen reflects the database at the moment the user

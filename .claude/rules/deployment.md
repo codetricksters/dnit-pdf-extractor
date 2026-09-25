@@ -31,6 +31,11 @@ alembic. `a2wsgi` mounts the synchronous Dash app inside the async FastAPI app.
 
 ## System Dependencies
 
+The `Dockerfile` has two stages. The first, `node:24-slim`, runs `npm ci` and
+`npm run build` in `frontend/`; the final Python image copies only
+`frontend/dist/`, so Node is a build dependency, not a runtime one. Outside
+Docker, Node 24 (npm 11) is needed to build the frontend and run its tests.
+
 The `Dockerfile` installs:
 
 - `gcc`, `libgl1`, `libglib2.0-0` — pdfplumber / easyocr.
@@ -65,6 +70,10 @@ the table below in the same change.
 | `BACKUP_RETENTION` | `14` | Newest dumps kept |
 | `BACKUP_INTERVAL_HOURS` | `24` | Scheduled backup interval |
 | `PG_BIN` | unset | Directory holding `pg_dump`/`pg_restore`; set it when the client on `PATH` is a different major than the server |
+| `VITE_BACKEND_URL` | `http://localhost:8000` | Development only: where `npm run dev` proxies the backend paths. Read by `frontend/vite.config.ts` from the shell or `frontend/.env.local`, not from the root `.env` |
+
+`VITE_BACKEND_URL` is not in `.env.example` on purpose: that file is read by the
+backend, which never uses it.
 
 Load in code with:
 ```python
@@ -106,8 +115,15 @@ fixtures.
 
 ```bash
 docker compose up -d postgres            # server on host port 5433
+(cd frontend && npm ci && npm run build) # frontend/dist, served by FastAPI
 uv run uvicorn main:app --reload --port 8000
 ```
+
+Without the build, `/` answers a page explaining how to run it; the API is
+unaffected. To work on the frontend, `cd frontend && npm run dev` (Vite on port
+5173) proxies `/api`, `/jobs`, `/admin`, `/reequilibrio`, `/static`,
+`/dashboard`, `/docs`, `/redoc`, `/openapi.json` and `POST /upload` to
+`VITE_BACKEND_URL`.
 
 Point `DATABASE_URL` at `localhost:5433` for a non-Docker run. Sample input PDFs
 go in `tmp/` (not committed).
@@ -132,6 +148,20 @@ PG_BIN=/usr/lib/postgresql/16/bin uv run pytest -q
 
 `tests/test_e2e_reequilibrio.py` imports the full official ANP file and takes a
 few seconds; it reads only the versioned `tests/fixtures/`.
+
+The frontend has two suites of its own, run from `frontend/`:
+
+```bash
+npm run test          # Vitest; no backend, no database
+npm run e2e           # builds, then Playwright against a real FastAPI on port 8765
+```
+
+`npm run e2e` starts the server itself through Playwright's `webServer`, after
+`scripts/preparar_e2e.py` resets `dnit_test` (`DATABASE_URL_TEST`, the same
+default as pytest) and loads `tests/fixtures/`. The script refuses a database
+whose name does not end in `_test`. Artefacts go to `tmp/e2e-data`. pytest and
+the e2e share `dnit_test`: never run both at once. Once per machine:
+`npx playwright install chromium`.
 
 ## Running in Production
 
@@ -180,6 +210,11 @@ dump of the current state first.
 `/static/*` is served by FastAPI's `StaticFiles` mount. In production behind a
 reverse proxy (nginx, Caddy), consider serving `app/static/` from the proxy
 directly to bypass the Python process.
+
+The SPA's own assets are served by `app/spa.py` from `frontend/dist/` — the same
+proxy advice applies to that directory; `index.html` must keep
+`Cache-Control: no-cache`, since it points at the hashed assets of the current
+build.
 
 ## Notes
 

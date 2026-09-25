@@ -12,24 +12,27 @@ migrations/                    # Numbered SQL migrations, applied in order at st
 ├── 003_catalogo.sql           # produto, produto_codigo
 ├── 004_contrato.sql           # contrato, contrato_familia_regiao, medicao_item
 ├── 005_template.sql           # template (xlsx blobs)
-└── 006_catalogo_indices.sql   # drops confirmado; origem/atualizado_em; btree_gist + no-overlap constraint
+├── 006_catalogo_indices.sql   # drops confirmado; origem/atualizado_em; btree_gist + no-overlap constraint
+└── 007_file_results_contrato.sql  # file_results.contrato_id / itens (which contract a file fed)
 scripts/
 ├── seed_indices.py            # Initial load through the importers (--anp, --igp-di)
+├── preparar_e2e.py            # Resets dnit_test and loads tests/fixtures/ for the Playwright suite
 ├── gerar_fixtures_e2e.py      # One-off: builds tests/fixtures/ from the reference spreadsheet
 └── build_template.py          # Rebuilds app/templates_xlsx/reequilibrio_template.xlsx
 app/
 ├── __init__.py
 ├── main.py                    # FastAPI app: lifespan (pools, migrations, seed, periodic tasks), routers, /dashboard mount
+├── spa.py                     # Serves frontend/dist: real files as-is, index.html for everything else
 ├── config.py                  # Env-driven settings (DATABASE_URL, STORAGE_PATH, backup knobs, PG_BIN)
 ├── db.py                      # psycopg pools (async + sync), advisory locks, migration runner
 ├── static/                    # Client-side assets served at /static/*
-├── templates/                 # Jinja2 HTML (base.html shell, _sidebar, _topbar, index.html)
+├── templates/                 # Jinja2 HTML of the previous interface (frozen; no route of its own)
 ├── templates_xlsx/
 │   └── reequilibrio_template.xlsx   # Seed template only; the live source is the database
 ├── models/
 │   └── job.py                 # Job/FileStatus enums and dataclasses
 ├── routers/
-│   ├── upload.py              # GET / and POST /upload (starts an async job)
+│   ├── upload.py              # POST /upload (starts an async job)
 │   ├── jobs.py                # Job status, SSE stream, result downloads, retry
 │   ├── admin.py               # Template and backup management (/admin)
 │   ├── reequilibrio.py        # GET /reequilibrio/planilha — the .xlsx export
@@ -55,17 +58,19 @@ app/
 │   ├── xlsx_drawings.py       # Text-box (equation) extraction and re-injection
 │   ├── template_repo.py       # Templates in the database: validate, list, activate, delete
 │   └── backup.py              # pg_dump/pg_restore, retention, scheduled run
-└── dashboard/                 # Dash app mounted at /dashboard via a2wsgi (synchronous)
-    ├── __init__.py            # create_dash_app()
-    ├── layout.py              # Shell only: sidebar, step trail, contract selector, styles
-    ├── views.py                # Pure render functions, one per screen
-    ├── callbacks.py           # Wiring: read the DB, render, write through the services
-    └── data_loader.py         # Reads the DB and reuses the export's calculation
+├── dashboard/                 # Dash app mounted at /dashboard via a2wsgi (synchronous; frozen, off the menu)
+│   ├── __init__.py            # create_dash_app()
+│   ├── layout.py              # Shell only: sidebar, step trail, contract selector, styles
+│   ├── views.py                # Pure render functions, one per screen
+│   ├── callbacks.py           # Wiring: read the DB, render, write through the services
+│   └── data_loader.py         # Reads the DB and reuses the export's calculation
+frontend/                      # React SPA (Vite + TypeScript) — see frontend.md; build output in dist/ (untracked)
 requirements.txt               # Flat dependency list (used by pip / Docker)
 ```
 
-Routes live in `app/routers/`, business logic in `app/services/`, HTML in
-`app/templates/`, client assets in `app/static/`.
+Routes live in `app/routers/`, business logic in `app/services/`, the interface
+in `frontend/` (see `frontend.md`). `app/templates/`, `app/static/` and
+`app/dashboard/` belong to the previous interface and are frozen.
 
 ## Database
 
@@ -98,7 +103,6 @@ finish instead.
 
 | Route | Handler | Notes |
 |---|---|---|
-| `GET /` | `upload.index` | Renders `index.html` |
 | `POST /upload` | `upload.upload` | `multipart/form-data`; returns `{"job_id": …}` and processes in the background |
 | `GET /jobs/…` | `jobs` | Status, SSE events, per-file and zipped downloads, retry |
 | `GET/POST /admin/templates…` | `admin` | Upload, download, activate, delete |
@@ -106,13 +110,16 @@ finish instead.
 | `GET /reequilibrio/planilha` | `reequilibrio.baixar_planilha` | `?contrato=15 00716/2022` → `.xlsx` |
 | `/api/v1/…` | `routers/api` | Contratos, catálogo, índices, cálculo e planilha; OpenAPI em `/docs` |
 | `GET /static/*` | `StaticFiles` | Mounted in `app/main.py` |
-| `/dashboard` | Dash app | Mounted WSGI app |
+| `/dashboard` | Dash app | Mounted WSGI app; frozen, off the menu |
+| `GET /{path}` | `spa.spa` | Registered **last**: a real file from `frontend/dist`, else `index.html` (no-cache). Paths under `api`, `jobs`, `admin`, `reequilibrio`, `static`, `dashboard`, `docs`, `redoc`, `openapi.json` are 404 here, never HTML. Without a build, a page explaining how to run it |
 
 ## Adding a New Router
 
 1. Create `app/routers/<name>.py` with `router = APIRouter(prefix="/...", tags=["..."])`.
 2. Register it in `app/main.py` with `app.include_router(<name>.router)`.
-3. Add any new templates to `app/templates/`, extending `base.html`.
+3. Register it **before** `spa.router`, which catches every GET left over; add
+   its first path segment to `RESERVADOS` in `app/spa.py` and to `PREFIXOS` in
+   `frontend/vite.config.ts`, so neither the SPA nor the dev proxy swallows it.
 
 ## Data Flow
 
@@ -130,8 +137,10 @@ PDF → pdf_classifier → extractor / ocr_extractor → {header, rows}
    user input + seed script   + region per família
 ```
 
-The dashboard reads the same path (`data_loader` → `montar_grupos` /
-`calcular_deltas`), so the screen and the downloaded spreadsheet cannot diverge.
+The React interface only reads this path through `/api/v1` (`calculo` →
+`reequilibrio_export.calcular`/`serializar`), and the Dash dashboard through
+`data_loader` → `montar_grupos` / `calcular_deltas` — so the screen and the
+downloaded spreadsheet cannot diverge.
 
 ## Extracted Table Schema
 
