@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Codigo, Produto } from '../src/api/tipos'
@@ -83,8 +83,8 @@ describe('Catálogo', () => {
     await usuario.selectOptions(within(dialogo).getByLabelText('Família'), 'Emulsões')
     await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar' }))
     expect(escritas[0]).toMatchObject({ metodo: 'POST', corpo: { descricao_export: 'Emulsão RL-1C', familia: 'EMULSOES' } })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByTestId('local')).toHaveTextContent('/catalogo?produto=9')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('local')).toHaveTextContent('/catalogo?produto=9'))
   })
 
   it('duplicado mostra o erro dentro do diálogo', async () => {
@@ -136,7 +136,7 @@ describe('Catálogo', () => {
     await usuario.click(within(dialogo).getByRole('button', { name: 'Associar selecionados (2)' }))
     expect(escritas.at(-1)).toMatchObject({ metodo: 'PUT', corpo: { codigos: ['40210', '60113'] } })
     expect(escritas.at(-1)!.url).toContain('/produtos/3/codigos')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByTestId('local')).toHaveTextContent(/^\/catalogo\?produto=3$/)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('local')).toHaveTextContent(/^\/catalogo\?produto=3$/))
   })
 })
