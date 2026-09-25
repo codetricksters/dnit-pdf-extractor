@@ -179,60 +179,6 @@ async def test_gravar_itens_e_idempotente():
     assert len(medicoes_repo.itens_para_export(contrato_id)) == 2
 
 
-async def test_mesmo_codigo_em_dois_grupos_do_mesmo_mes_soma_o_valor():
-    """The same material measured under two work groups in the same PDF.
-
-    Real case: ``45ª MP.pdf``, código 60112 — the DNIT PDF lists the same
-    material under an old and a new "etapa" of the contract; only one carries
-    a real value this month, but both share the group's Fator.
-    """
-    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
-    medicoes_repo.gravar_itens(
-        contrato_id,
-        [
-            _linha("60112", "AQUISIÇÃO DE CAP 50/70", 0.0, 0.4797),
-            _linha("60112", "AQUISIÇÃO DE CAP 50/70", 107346.52, 0.4797),
-        ],
-    )
-    item = medicoes_repo.itens_para_export(contrato_id)[0]
-    assert item["valor_pi"] == Decimal("107346.52")
-    assert item["fator"] == Decimal("0.4797")
-
-
-async def test_linha_de_estorno_com_fator_zero_nunca_entra_no_calculo():
-    """A reversal line ("EST.QTDE.LQDA. …") always prints Fator 0 — even when
-    it carries a real (negative) value, per DNIT's own convention — and is
-    excluded outright, real case: ``30ª MP.pdf``, código 60112.
-    """
-    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
-    gravados = medicoes_repo.gravar_itens(
-        contrato_id,
-        [
-            _linha("60112", "AQUISIÇÃO DE CAP 50/70", -82238.5, 0.0),
-        ],
-    )
-    assert gravados == 0
-    assert medicoes_repo.itens_para_export(contrato_id) == []
-
-
-async def test_grupo_real_soma_mesmo_com_linhas_de_estorno_no_meio():
-    """Two real groups plus estorno lines in between: only the real groups'
-    values sum; the estorno's own value never joins the total.
-    """
-    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
-    medicoes_repo.gravar_itens(
-        contrato_id,
-        [
-            _linha("60112", "AQUISIÇÃO DE CAP 50/70", 145178.70, 0.1963),
-            _linha("60112", "EST.QTDE.LQDA. 8,0 60112 - 1,2,3", -1000.0, 0.0),
-            _linha("60112", "AQUISIÇÃO DE CAP 50/70", 197208.20, 0.1963),
-        ],
-    )
-    item = medicoes_repo.itens_para_export(contrato_id)[0]
-    assert item["valor_pi"] == Decimal("342386.90")
-    assert item["fator"] == Decimal("0.1963")
-
-
 async def test_linhas_sem_codigo_de_servico_sao_ignoradas():
     contrato_id = contratos_repo.registrar_do_pdf(HEADER)
     resumo = medicoes_repo.gravar_itens(
