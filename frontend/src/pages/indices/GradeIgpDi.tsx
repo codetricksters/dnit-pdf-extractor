@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { chaves } from '../../api/chaves'
 import { excluirIgpDi, gravarIgpDi, listarIgpDi, URL_TEMPLATE_IGP_DI, urlExportarIgpDi } from '../../api/indices'
 import { aposIndices } from '../../api/invalidar'
+import { BotaoBaixar } from '../../components/BotaoBaixar'
 import { CelulaEditavel } from '../../components/CelulaEditavel'
 import { Carregando } from '../../components/Carregando'
 import { Icone } from '../../components/Icone'
@@ -16,7 +17,7 @@ const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'o
 
 export function GradeIgpDi() {
   const qc = useQueryClient()
-  const indices = useQuery({ queryKey: chaves.igpDi(), queryFn: listarIgpDi })
+  const indices = useQuery({ queryKey: chaves.todosIgpDi, queryFn: listarIgpDi })
   const grade = useMemo(() => montarGradeIgpDi(indices.data ?? [], new Date().getFullYear()), [indices.data])
   const [importando, setImportando] = useState(false)
 
@@ -30,9 +31,9 @@ export function GradeIgpDi() {
       <FaixaCobertura serie="igp_di" />
       <div className="barra mt-md">
         <span className="espaco" />
-        <a className="btn" href={URL_TEMPLATE_IGP_DI} download>Baixar template</a>
-        <a className="btn" href={urlExportarIgpDi('xlsx')} download>Exportar .xlsx</a>
-        <a className="btn" href={urlExportarIgpDi('csv')} download>Exportar .csv</a>
+        <BotaoBaixar caminho={URL_TEMPLATE_IGP_DI} nomeArquivo="igp_di_template.xlsx">Baixar template</BotaoBaixar>
+        <BotaoBaixar caminho={urlExportarIgpDi('xlsx')} nomeArquivo="igp_di.xlsx">Exportar .xlsx</BotaoBaixar>
+        <BotaoBaixar caminho={urlExportarIgpDi('csv')} nomeArquivo="igp_di.csv">Exportar .csv</BotaoBaixar>
         <button type="button" className="btn btn-primary" onClick={() => setImportando(true)}>
           <Icone nome="upload_file" />
           <span>Importar</span>
