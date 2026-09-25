@@ -47,3 +47,9 @@ docker-compose.yml
 
 # Claude
 .claude/
+
+# Frontend: dependências e build locais; a imagem gera os seus
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/

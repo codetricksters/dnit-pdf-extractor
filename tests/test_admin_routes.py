@@ -95,10 +95,14 @@ async def test_nome_de_backup_fora_do_padrao_e_recusado(client):
     """Only a plain dump name resolves to a path.
 
     A name with separators never even reaches the handler — the router has no
-    route for the extra segments — and anything else outside the allowed
-    characters is refused by the service.
+    route for the extra segments. The client normalises ``..`` before sending,
+    so the path lands outside ``/admin`` entirely; the only route left that
+    matches it there is the SPA catch-all's GET, which makes a DELETE to it
+    405 (path exists, wrong method) rather than 404 — still never touching the
+    backup service. Anything else outside the allowed characters is refused by
+    the service.
     """
-    assert (await client.delete("/admin/backups/../../etc/passwd.dump")).status_code == 404
+    assert (await client.delete("/admin/backups/../../etc/passwd.dump")).status_code == 405
 
     r = await client.delete("/admin/backups/passwd$;.dump")
     assert r.status_code == 422

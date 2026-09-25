@@ -1,3 +1,12 @@
+# Estágio 1: o build do frontend React. Só frontend/dist vai para a imagem
+# final; Node não é dependência de execução.
+FROM node:24-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 # Use Python 3.12 slim image
 FROM python:3.12-slim
 
@@ -39,6 +48,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# O SPA construído no estágio 1 (app/spa.py serve frontend/dist).
+COPY --from=frontend /frontend/dist ./frontend/dist
 
 # Create tmp directory for uploads
 RUN mkdir -p tmp

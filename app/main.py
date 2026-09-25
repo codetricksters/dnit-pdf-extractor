@@ -15,6 +15,7 @@ from .db import (
     close_pools,
     open_pools,
 )
+from . import spa
 from .routers import admin
 from .routers import upload
 from .routers import jobs
@@ -82,3 +83,6 @@ app.include_router(api.router)
 app.add_exception_handler(api.ErroApi, api.tratar_erro_api)
 
 app.mount("/dashboard", create_dash_app())
+
+# Por último: o catch-all do SPA só recebe o que nenhuma rota acima atendeu.
+app.include_router(spa.router)
