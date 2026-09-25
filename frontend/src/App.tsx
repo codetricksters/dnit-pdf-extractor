@@ -10,6 +10,8 @@ import { ListaContratos } from './pages/contratos/ListaContratos'
 import { GradeAnp } from './pages/indices/GradeAnp'
 import { GradeIgpDi } from './pages/indices/GradeIgpDi'
 import { PaginaIndices } from './pages/indices/PaginaIndices'
+import { PaginaBackups } from './pages/sistema/PaginaBackups'
+import { PaginaTemplates } from './pages/sistema/PaginaTemplates'
 import { PaginaUpload } from './pages/upload/PaginaUpload'
 
 export function AppRoutes() {
@@ -30,6 +32,9 @@ export function AppRoutes() {
           <Route path="igp-di" element={<GradeIgpDi />} />
         </Route>
         <Route path="upload" element={<PaginaUpload />} />
+        <Route path="sistema" element={<Navigate to="templates" replace />} />
+        <Route path="sistema/templates" element={<PaginaTemplates />} />
+        <Route path="sistema/backups" element={<PaginaBackups />} />
         <Route path="*" element={<NaoEncontrado />} />
       </Route>
     </Routes>
