@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { IndiceMensal, SemanaAnp } from '../src/api/tipos'
@@ -63,11 +63,15 @@ function preparar() {
 }
 
 describe('Índices', () => {
-  it('/indices abre o ANP, com a cobertura', async () => {
+  it('/indices abre o ANP, com a cobertura do CAP rotulada', async () => {
     preparar()
     renderApp('/indices')
     expect(screen.getByTestId('local')).toHaveTextContent('/indices/anp')
     expect(await screen.findByText(/60\.114 registros/)).toBeInTheDocument()
+    // GET /indices/cobertura não é por produto: o backend sempre soma a série
+    // do CAP, mesmo que a grade esteja mostrando outro produto — o rótulo diz
+    // isso, em vez de parecer a cobertura do produto selecionado.
+    expect(screen.getByText(/Período \(CAP\):/)).toBeInTheDocument()
   })
 
   it('grade do ANP: preço, sem cotação, célula vazia e marca de manual', async () => {
@@ -80,9 +84,34 @@ describe('Índices', () => {
     const norte = within(linha).getByRole('button', { name: 'Editar Norte 08/01 – 14/01/2023' }).closest('td')!
     expect(norte).toHaveClass('manual')
     expect(norte).toHaveAttribute('title', 'manual · 24/09/2026 07:02')
-    const exportar = new URL(screen.getByRole('link', { name: 'Exportar .xlsx' }).getAttribute('href')!, 'http://x')
-    expect(exportar.pathname).toBe('/api/v1/indices/anp/exportar')
-    expect(Object.fromEntries(exportar.searchParams)).toEqual({ produto: CAP, formato: 'xlsx' })
+  })
+
+  it('exportar busca o arquivo como blob, com os filtros da tela, em vez de um link puro', async () => {
+    preparar()
+    const pedidos: URL[] = []
+    servidor.use(
+      http.get('/api/v1/indices/anp/exportar', ({ request }) => {
+        pedidos.push(new URL(request.url))
+        return HttpResponse.text('conteudo', { headers: { 'Content-Disposition': 'attachment; filename="indices_anp.xlsx"' } })
+      }),
+    )
+    const { usuario } = renderApp('/indices/anp')
+    await screen.findByText('08/01 – 14/01/2023')
+    await usuario.click(screen.getByRole('button', { name: 'Exportar .xlsx' }))
+    await waitFor(() => expect(pedidos).toHaveLength(1))
+    expect(pedidos[0].pathname).toBe('/api/v1/indices/anp/exportar')
+    expect(Object.fromEntries(pedidos[0].searchParams)).toEqual({ produto: CAP, formato: 'xlsx' })
+  })
+
+  it('exportar mostra o erro do backend em vez de salvar a resposta como arquivo', async () => {
+    preparar()
+    servidor.use(
+      http.get('/api/v1/indices/anp/exportar', () => HttpResponse.json({ detail: 'Falha ao gerar o arquivo.' }, { status: 500 })),
+    )
+    const { usuario } = renderApp('/indices/anp')
+    await screen.findByText('08/01 – 14/01/2023')
+    await usuario.click(screen.getByRole('button', { name: 'Exportar .xlsx' }))
+    expect(await screen.findByText('Falha ao gerar o arquivo.')).toBeInTheDocument()
   })
 
   it('editar uma célula do ANP grava a semana inteira da região', async () => {
@@ -172,7 +201,22 @@ describe('Índices', () => {
     await usuario.click(within(dialogo).getByRole('button', { name: 'Apagar' }))
     expect(escritas.at(-1)).toMatchObject({ metodo: 'DELETE' })
     expect(escritas.at(-1)!.url).toContain('/igp-di/2023-02')
-    expect(screen.getByRole('link', { name: 'Baixar template' })).toHaveAttribute('href', '/api/v1/indices/igp-di/template')
+    expect(screen.getByRole('button', { name: 'Baixar template' })).toBeInTheDocument()
+  })
+
+  it('baixar o template do IGP-DI busca como blob, não como link puro', async () => {
+    preparar()
+    const pedidos: string[] = []
+    servidor.use(
+      http.get('/api/v1/indices/igp-di/template', ({ request }) => {
+        pedidos.push(new URL(request.url).pathname)
+        return HttpResponse.text('modelo', { headers: { 'Content-Disposition': 'attachment; filename="igp_di_template.xlsx"' } })
+      }),
+    )
+    const { usuario } = renderApp('/indices/igp-di')
+    await screen.findByRole('button', { name: 'Editar IGP-DI fev/2023' })
+    await usuario.click(screen.getByRole('button', { name: 'Baixar template' }))
+    await waitFor(() => expect(pedidos).toEqual(['/api/v1/indices/igp-di/template']))
   })
 
   it('apagar o valor de uma célula do ANP pede confirmação antes de gravar nulo', async () => {
