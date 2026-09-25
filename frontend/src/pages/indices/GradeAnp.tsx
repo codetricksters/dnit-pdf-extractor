@@ -38,9 +38,14 @@ export function GradeAnp() {
     mutationFn: async (linha: LinhaAnp) => {
       for (const s of Object.values(linha.celulas)) if (s) await excluirSemanaAnp(s.id)
     },
-    onSuccess: async () => {
-      await aposIndices(qc)
+    onSuccess: () => {
       setApagando(null)
+    },
+    onSettled: async () => {
+      // Mesmo numa falha parcial (uma região apagada, outra não), a grade
+      // precisa refletir o estado real do banco em vez de continuar mostrando
+      // dados que já não existem mais.
+      await aposIndices(qc)
     },
   })
 

@@ -106,6 +106,35 @@ describe('Índices', () => {
     expect(apagadas.sort()).toEqual(['1', '2', '3'])
   })
 
+  it('apagar a semana com falha parcial ainda atualiza a grade com o que foi apagado', async () => {
+    const deletadas = new Set<string>()
+    servidor.use(
+      http.get('/api/v1/indices/cobertura', () => HttpResponse.json(umaCobertura())),
+      http.get('/api/v1/indices/anp/produtos', () => HttpResponse.json([CAP, 'Óleo Diesel (R$/l)'])),
+      http.get('/api/v1/indices/anp', () => HttpResponse.json(SEMANAS.filter((s) => !deletadas.has(String(s.id))))),
+      // A região Sul (id 2) falha; Nordeste (id 1), que vem antes na ordem de
+      // inserção, já foi apagada com sucesso antes da falha interromper o laço.
+      http.delete('/api/v1/indices/anp/:id', ({ params }) => {
+        const id = String(params.id)
+        if (id === '2') return HttpResponse.json({ detail: 'falha ao apagar' }, { status: 500 })
+        deletadas.add(id)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const { usuario } = renderApp('/indices/anp')
+    const linha = (await screen.findByText('08/01 – 14/01/2023')).closest('tr')!
+    await usuario.click(within(linha).getByRole('button', { name: 'Apagar semana 08/01 – 14/01/2023' }))
+    await usuario.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Apagar' }))
+
+    // A mutação como um todo falhou (Sul não foi apagada) e o diálogo continua
+    // aberto mostrando o erro — mas a grade já reflete a região que foi
+    // apagada com sucesso antes da falha, em vez de continuar mostrando um
+    // preço que já não existe mais no banco.
+    expect(await screen.findByRole('dialog')).toHaveTextContent('falha ao apagar')
+    const linhaAtualizada = (await screen.findByText('08/01 – 14/01/2023')).closest('tr')!
+    expect(within(linhaAtualizada).getByRole('button', { name: 'Editar Nordeste 08/01 – 14/01/2023' })).toHaveTextContent('—')
+  })
+
   it('nova semana grava pelo diálogo', async () => {
     const escritas = preparar()
     const { usuario } = renderApp('/indices/anp')
