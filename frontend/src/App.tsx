@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router'
 import { NaoEncontrado } from './components/NaoEncontrado'
 import { Shell } from './components/Shell'
+import { PaginaCatalogo } from './pages/catalogo/PaginaCatalogo'
 import { AbaCadastro } from './pages/contrato/AbaCadastro'
 import { AbaCalculo } from './pages/contrato/AbaCalculo'
 import { AbaMedicoes } from './pages/contrato/AbaMedicoes'
@@ -18,6 +19,7 @@ export function AppRoutes() {
           <Route path="medicoes" element={<AbaMedicoes />} />
           <Route path="calculo" element={<AbaCalculo />} />
         </Route>
+        <Route path="catalogo" element={<PaginaCatalogo />} />
         <Route path="*" element={<NaoEncontrado />} />
       </Route>
     </Routes>
