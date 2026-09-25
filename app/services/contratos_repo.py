@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from ..db import acquire_sync
 from . import indices_repo
-from .catalogo import _padrao_ilike
+from .catalogo import padrao_ilike
 from .delta_p import FAMILIA_CAP, FAMILIA_EMULSOES, FAMILIAS, inicio_do_mes
 from .number_parser import parse_br_number
 
@@ -153,7 +153,7 @@ def listar(numero: str | None = None) -> list[dict]:
         "FROM contrato c"
     )
     params: list = []
-    padrao = _padrao_ilike(numero)
+    padrao = padrao_ilike(numero)
     if padrao:
         sql += " WHERE c.numero ILIKE %s"
         params.append(padrao)

@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from ..db import acquire_sync
-from .catalogo import _padrao_ilike
+from .catalogo import padrao_ilike
 from .contratos_repo import mes_da_medicao
 
 # Same rule the extractor uses to recognise a record: a 4+-digit service code.
@@ -143,7 +143,7 @@ def listar_itens(
             "       OR m.descricao_pdf ILIKE %(padrao)s) "
             "ORDER BY m.mes_medicao, m.codigo_servico, m.id",
             {"contrato": contrato_id, "mes": mes, "no_calculo": no_calculo,
-             "padrao": _padrao_ilike(q)},
+             "padrao": padrao_ilike(q)},
         )
         return [dict(r) for r in cur.fetchall()]
 

@@ -195,7 +195,7 @@ def codigos_associados() -> dict[str, dict]:
         return {r["codigo_servico"]: dict(r) for r in cur.fetchall()}
 
 
-def _padrao_ilike(q: str | None) -> str | None:
+def padrao_ilike(q: str | None) -> str | None:
     """``%q%`` com os curingas do usuário escapados, ou None se *q* está vazio.
 
     ``%`` e ``_`` digitados são texto: quem procura "100%" quer o sinal, não
@@ -247,7 +247,7 @@ def buscar_codigos(
             "       OR (p.id IS NOT NULL) = %(associado)s) "
             "  AND (%(produto_id)s::bigint IS NULL OR p.id = %(produto_id)s) "
             "ORDER BY c.codigo_servico LIMIT %(limite)s",
-            {"padrao": _padrao_ilike(q), "associado": associado,
+            {"padrao": padrao_ilike(q), "associado": associado,
              "produto_id": produto_id, "limite": limite},
         )
         return [dict(r) for r in cur.fetchall()]
