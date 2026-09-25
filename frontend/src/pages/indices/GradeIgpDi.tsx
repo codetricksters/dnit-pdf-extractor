@@ -1,14 +1,16 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { chaves } from '../../api/chaves'
 import { excluirIgpDi, gravarIgpDi, listarIgpDi, URL_TEMPLATE_IGP_DI, urlExportarIgpDi } from '../../api/indices'
 import { aposIndices } from '../../api/invalidar'
 import { CelulaEditavel } from '../../components/CelulaEditavel'
 import { Carregando } from '../../components/Carregando'
+import { Icone } from '../../components/Icone'
 import { MensagemErro } from '../../components/MensagemErro'
 import { dataHora, exato, mesAno } from '../../lib/formato'
 import { FaixaCobertura } from './FaixaCobertura'
 import { montarGradeIgpDi } from './grade'
+import { ImportarIndices } from './ImportarIndices'
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
@@ -16,6 +18,7 @@ export function GradeIgpDi() {
   const qc = useQueryClient()
   const indices = useQuery({ queryKey: chaves.igpDi(), queryFn: listarIgpDi })
   const grade = useMemo(() => montarGradeIgpDi(indices.data ?? [], new Date().getFullYear()), [indices.data])
+  const [importando, setImportando] = useState(false)
 
   async function depois<T>(acao: Promise<T>) {
     await acao
@@ -30,6 +33,10 @@ export function GradeIgpDi() {
         <a className="btn" href={URL_TEMPLATE_IGP_DI} download>Baixar template</a>
         <a className="btn" href={urlExportarIgpDi('xlsx')} download>Exportar .xlsx</a>
         <a className="btn" href={urlExportarIgpDi('csv')} download>Exportar .csv</a>
+        <button type="button" className="btn btn-primary" onClick={() => setImportando(true)}>
+          <Icone nome="upload_file" />
+          <span>Importar</span>
+        </button>
       </div>
 
       <MensagemErro erro={indices.error} />
@@ -73,6 +80,8 @@ export function GradeIgpDi() {
           </div>
         </section>
       )}
+
+      {importando && <ImportarIndices serie="igp-di" aoFechar={() => setImportando(false)} />}
     </>
   )
 }

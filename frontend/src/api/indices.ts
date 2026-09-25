@@ -1,5 +1,5 @@
 import { caminhoCom, pedir } from './client'
-import type { Cobertura, IndiceMensal, SemanaAnp, SemanaAnpEntrada } from './tipos'
+import type { Cobertura, IndiceMensal, ResultadoImportacao, SemanaAnp, SemanaAnpEntrada } from './tipos'
 
 const BASE = '/api/v1/indices'
 
@@ -43,3 +43,19 @@ export const excluirIgpDi = (mes: string) => pedir<void>(`${BASE}/igp-di/${mes}`
 export const URL_TEMPLATE_IGP_DI = `${BASE}/igp-di/template`
 
 export const urlExportarIgpDi = (formato: Formato) => caminhoCom(`${BASE}/igp-di/exportar`, { formato })
+
+export type SerieIndice = 'anp' | 'igp-di'
+
+export function importarIndices(
+  serie: SerieIndice,
+  arquivo: File,
+  opcoes: { simular: boolean; sobrescrever_manuais?: boolean },
+) {
+  const form = new FormData()
+  form.append('arquivo', arquivo)
+  return pedir<ResultadoImportacao>(`${BASE}/${serie}/importar`, {
+    metodo: 'POST',
+    form,
+    params: { simular: opcoes.simular, sobrescrever_manuais: opcoes.sobrescrever_manuais ?? false },
+  })
+}

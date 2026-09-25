@@ -13,6 +13,7 @@ import { MensagemErro } from '../../components/MensagemErro'
 import { dataHora, exato, semana } from '../../lib/formato'
 import { FaixaCobertura } from './FaixaCobertura'
 import { montarGradeAnp, type LinhaAnp } from './grade'
+import { ImportarIndices } from './ImportarIndices'
 import { NovaSemana } from './NovaSemana'
 
 export function GradeAnp() {
@@ -23,6 +24,7 @@ export function GradeAnp() {
   const [periodo, setPeriodo] = useState<{ de?: string; ate?: string }>({})
   const [novaSemana, setNovaSemana] = useState(false)
   const [apagando, setApagando] = useState<LinhaAnp | null>(null)
+  const [importando, setImportando] = useState(false)
 
   const produtos = useQuery({ queryKey: chaves.produtosAnp, queryFn: listarProdutosAnp })
   const semanas = useQuery({
@@ -77,6 +79,10 @@ export function GradeAnp() {
         <span className="espaco" />
         <a className="btn" href={urlExportarAnp({ produto, ...periodo, formato: 'xlsx' })} download>Exportar .xlsx</a>
         <a className="btn" href={urlExportarAnp({ produto, ...periodo, formato: 'csv' })} download>Exportar .csv</a>
+        <button type="button" className="btn" onClick={() => setImportando(true)}>
+          <Icone nome="upload_file" />
+          <span>Importar</span>
+        </button>
         <button type="button" className="btn btn-primary" onClick={() => setNovaSemana(true)}>
           <Icone nome="add" />
           <span>Nova semana</span>
@@ -141,6 +147,7 @@ export function GradeAnp() {
       )}
 
       {novaSemana && <NovaSemana produto={produto} aoFechar={() => setNovaSemana(false)} />}
+      {importando && <ImportarIndices serie="anp" aoFechar={() => setImportando(false)} />}
       {apagando && (
         <ConfirmarDialogo
           titulo={`Apagar a semana ${semana(apagando.inicio, apagando.fim)}?`}
