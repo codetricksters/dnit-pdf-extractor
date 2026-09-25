@@ -26,6 +26,7 @@ ENV/
 .gitignore
 
 # Environment
+.env
 .env.local
 
 # UV
@@ -35,6 +36,9 @@ uv.lock
 # Test files
 tmp/
 *.pdf
+
+# Application data (extraction artefacts and database backups)
+data/
 
 # Docker
 Dockerfile
