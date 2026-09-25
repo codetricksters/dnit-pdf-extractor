@@ -157,12 +157,12 @@ schema.
 Rodando fora do Docker, aponte a `DATABASE_URL` para `localhost:5433`.
 
 O seed grava todos os produtos do arquivo da ANP (o cálculo usa só o CAP 50/70).
-O IGP-DI não vem de arquivo público padronizado: baixe o template em
-`GET /api/v1/indices/igp-di/template`, preencha os meses e importe-o por
-`POST /api/v1/indices/igp-di/importar` ou por
-`uv run python scripts/seed_indices.py --sem-anp --igp-di <arquivo>`. Rodar o seed
-de novo não desfaz correções manuais. Arquivos mais novos da ANP entram por
-`POST /api/v1/indices/anp/importar`.
+O IGP-DI não vem de arquivo público padronizado: em `/indices/igp-di`, use
+*Baixar template*, preencha os meses e depois *Importar*, com prévia antes de
+gravar. Arquivos mais novos da ANP entram do mesmo jeito, em `/indices/anp` →
+*Importar*. Rodar o seed de novo não desfaz correções manuais. Os mesmos
+caminhos existem pela API: `GET /api/v1/indices/igp-di/template`,
+`POST /api/v1/indices/igp-di/importar` e `POST /api/v1/indices/anp/importar`.
 
 Depois disso: envie os PDFs em `http://localhost:8000/upload`, complete o cadastro
 do contrato e as regiões da ANP, associe os códigos de CAP e de emulsão a

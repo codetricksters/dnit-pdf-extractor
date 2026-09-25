@@ -199,7 +199,7 @@ owns is inside that single dump — índices, contracts, measurement items and t
 Excel templates.
 
 Since the user runs in Docker and should not need `docker cp` or a shell, all of
-it is reachable from the interface (Dash tab *Templates e backup*, routes under
+it is reachable from the interface (`/sistema/backups`, routes under
 `/admin/backups`): generate now, list, download, upload a `.dump`, restore and
 delete. Restoring requires typing the backup's name to confirm, validates the
 file with `pg_restore --list` before touching the database, and writes a safety

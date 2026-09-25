@@ -46,9 +46,11 @@ nunca `default`.
 `PaginaContrato.tsx` redireciona para `cadastro` assim que a página monta, sem
 esperar o contrato carregar.
 
-O que a tela mostra de estado compartilhável (simulação, produto selecionado,
-busca) fica na **URL**, não em estado local: recarregar ou mandar o link
-reproduz a tela.
+A simulação de região da aba *Cálculo* (`?regiao_cap=`/`?regiao_emulsoes=`) e a
+seleção/busca do *Catálogo* (`?produto=`/`?q=`) ficam na **URL**: recarregar ou
+mandar o link reproduz a tela. Os demais filtros (busca da lista de contratos,
+filtros da aba *Medições*, filtros da grade ANP/IGP-DI) são estado local — não
+compartilháveis por link.
 
 `GET /upload` é a tela e `POST /upload` é o envio: o `app/spa.py` só atende GET,
 e o proxy do Vite desvia para `index.html` o GET que pede `text/html`.

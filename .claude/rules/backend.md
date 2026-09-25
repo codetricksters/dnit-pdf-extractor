@@ -44,10 +44,11 @@ Some pages emit a 12-col header with a trailing `None`, shifting `Ajuste Contrat
 
 ### Number Handling
 
-Latin-formatted numbers (`1.872.240,49`) are preserved as strings in the
-extraction output. `number_parser.parse_br_number` converts them, and the
-repositories call it when writing to `NUMERIC` columns. Do **not** call it during
-extraction — the JSON artefact keeps the raw strings.
+Latin-formatted numbers (`1.872.240,49`) arrive from `pdfplumber`/OCR as strings.
+`number_parser.convert_numeric_columns` (over `parse_br_number`) is called once
+per record **during extraction** — both `extractor.py` and `ocr_extractor.py`
+call it before the record is emitted — so the `NUMERIC_COLUMNS` fields land in
+the JSON artefact and in `medicoes_repo` already as `float`, not as raw strings.
 
 ### Error Handling
 

@@ -13,8 +13,12 @@ users maintain (ANP weekly prices and IGP-DI) to compute the ΔP of art. 16.
 The deliverable is an **Excel "Reequilíbrio" spreadsheet** generated from a
 user-maintained template, with the calculation written as **live formulas** and
 the memória de cálculo preserved as a native equation, so every number can be
-audited. A Dash dashboard at `/dashboard` shows the same calculation on screen and
-hosts the registration, índices, template and backup screens.
+audited. The interface is a **React SPA** in `frontend/`, built by Vite and
+served by FastAPI from `frontend/dist/` (`app/spa.py`); it shows the same
+calculation on screen and hosts the registration, índices, template and backup
+screens. The previous interface — Jinja templates and a Dash dashboard at
+`/dashboard` — is **frozen**: it stays in the repository and keeps working, but
+is off the menu and receives no new features.
 
 ## Setup & Commands
 
@@ -27,14 +31,21 @@ uv sync
 # Start PostgreSQL (required by the app and by the test suite, host port 5433)
 docker compose up -d postgres
 
+# Build the frontend (Node 24 required; output in frontend/dist, served by FastAPI)
+cd frontend && npm ci && npm run build
+
 # Run the dev server (migrations are applied at startup)
 uv run uvicorn main:app --reload --port 8000
 
 # One-off initial load of the price índices
 uv run python scripts/seed_indices.py
 
-# Run tests
+# Run the backend tests
 uv run pytest -v
+
+# Run the frontend tests (from frontend/)
+npm run test    # Vitest; no backend, no database
+npm run e2e     # builds, then Playwright against a real FastAPI
 
 # Add a runtime dependency
 uv add <package>
