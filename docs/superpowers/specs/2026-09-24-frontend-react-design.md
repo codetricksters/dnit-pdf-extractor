@@ -201,6 +201,10 @@ frontend/
 | `GET /api/v1/contratos/{id}/medicoes?mes=&no_calculo=&q=` | itens do contrato com produto associado (ou nulo); 404 se o contrato não existe |
 | `GET /api/v1/codigos?produto_id=` | novo filtro: códigos associados a um produto |
 | `PUT /api/v1/produtos/{id}/codigos` `{"codigos": [...]}` | associa vários códigos ao produto numa transação; 404 produto inexistente |
+| `GET /api/v1/indices/anp/produtos` | produtos ANP distintos no banco, para o filtro da grade ANP |
+| `GET /api/v1/indices/cobertura` | cada série ganha `manuais`: quantos valores foram corrigidos à mão |
+| JSON do cálculo | ganha `arquivo`: o nome que a planilha baixada teria, com `SIMULACAO` quando há override |
+| `GET /jobs/{id}/status` | cada arquivo ganha `contrato_id` e `itens` depois de persistido (migração 007, `file_results.contrato_id`/`itens`), para a tela de upload levar ao contrato |
 
 ## Fluxo de dados
 
