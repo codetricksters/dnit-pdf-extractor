@@ -18,6 +18,9 @@ test('criar um produto, associar o 60112 e ver a linha no cálculo', async ({ pa
   await adicionar.getByRole('button', { name: 'Buscar' }).click()
   const linha = adicionar.getByRole('row').filter({ hasText: '60112' })
   await expect(linha).toContainText('em Aquisição de CAP 50/70')
+  // A busca de fato restringiu a lista: um código que existe no catálogo mas
+  // não bate com "60112" (Emulsão RR-1C) não pode aparecer no resultado.
+  await expect(adicionar.getByRole('row').filter({ hasText: '29083' })).toHaveCount(0)
   await linha.getByRole('checkbox').check()
   await adicionar.getByRole('button', { name: 'Associar selecionados (1)' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
