@@ -4,6 +4,7 @@ import { chaves } from '../../api/chaves'
 import { listarContratos } from '../../api/contratos'
 import { urlResultado, urlZip } from '../../api/jobs'
 import type { StatusArquivo, StatusJob } from '../../api/tipos'
+import { BotaoBaixar } from '../../components/BotaoBaixar'
 import { Icone } from '../../components/Icone'
 
 const ROTULO: Record<StatusArquivo, string> = {
@@ -57,11 +58,16 @@ export function TabelaLote({ status, aoTentarDeNovo, tentando }: Props) {
                       <Link to={`/contratos/${a.contrato_id}`}>{numero(a.contrato_id)}</Link>
                     </>
                   )}
+                  {a.status === 'completed' && a.contrato_id === null && (
+                    <span className="muted">Sem número de contrato no cabeçalho</span>
+                  )}
                   {a.status === 'failed' && <span className="erro-campo">{a.error}</span>}
                 </td>
                 <td>
                   {a.status === 'completed' && (
-                    <a className="btn btn-sm" href={urlResultado(status.job_id, nome)} download>JSON</a>
+                    <BotaoBaixar caminho={urlResultado(status.job_id, nome)} nomeArquivo={`${nome}.json`} className="btn btn-sm">
+                      JSON
+                    </BotaoBaixar>
                   )}
                   {a.status === 'failed' && (
                     <button
@@ -82,10 +88,10 @@ export function TabelaLote({ status, aoTentarDeNovo, tentando }: Props) {
       {status.completed && concluidos > 0 && (
         <div className="barra panel-body">
           <span className="espaco" />
-          <a className="btn" href={urlZip(status.job_id)} download>
+          <BotaoBaixar caminho={urlZip(status.job_id)} nomeArquivo={`${status.job_id}.zip`}>
             <Icone nome="folder_zip" />
             <span>Baixar todos os resultados (.zip)</span>
-          </a>
+          </BotaoBaixar>
         </div>
       )}
     </section>

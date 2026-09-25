@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ResumoJob, StatusJob } from '../src/api/tipos'
@@ -70,12 +70,54 @@ describe('Upload de PDFs', () => {
     expect(await within(ok).findByText('Concluído')).toHaveClass('badge-completed')
     expect(within(ok).getByText(/48 itens/)).toBeInTheDocument()
     expect(within(ok).getByRole('link', { name: '15 00716/2022' })).toHaveAttribute('href', '/contratos/1')
-    expect(within(ok).getByRole('link', { name: 'JSON' })).toHaveAttribute('href', '/jobs/j1/download/medicao_fev.pdf')
+    expect(within(ok).getByRole('button', { name: 'JSON' })).toBeInTheDocument()
 
     const falhou = screen.getByText('escaneado.pdf', { selector: 'td' }).closest('tr')!
     expect(within(falhou).getByText('Falhou')).toHaveClass('badge-failed')
     expect(within(falhou).getByText('Nenhum registro encontrado no PDF.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Baixar todos os resultados (.zip)' })).toHaveAttribute('href', '/jobs/j1/download')
+    expect(screen.getByRole('button', { name: 'Baixar todos os resultados (.zip)' })).toBeInTheDocument()
+  })
+
+  it('arquivo concluído sem número de contrato no cabeçalho avisa em vez de mostrar célula vazia', async () => {
+    preparar({
+      ativos: [umResumo({ job_id: 'j1', completed: false })],
+      status: umStatus(true, {
+        'sem_contrato.pdf': { status: 'completed', error: null, contrato_id: null, itens: 12 },
+      }),
+    })
+    renderApp('/upload')
+    const linha = (await screen.findByText('sem_contrato.pdf', { selector: 'td' })).closest('tr')!
+    expect(within(linha).getByText('sem número de contrato no cabeçalho', { exact: false })).toBeInTheDocument()
+  })
+
+  it('baixar o JSON de um arquivo busca como blob, não como link puro', async () => {
+    preparar({ ativos: [umResumo({ job_id: 'j1', completed: false })] })
+    const pedidos: string[] = []
+    servidor.use(
+      http.get('/jobs/j1/download/medicao_fev.pdf', ({ request }) => {
+        pedidos.push(new URL(request.url).pathname)
+        return HttpResponse.text('{}', { headers: { 'Content-Disposition': 'attachment; filename="medicao_fev.pdf.json"' } })
+      }),
+    )
+    const { usuario } = renderApp('/upload')
+    const ok = (await screen.findByText('medicao_fev.pdf', { selector: 'td' })).closest('tr')!
+    await usuario.click(within(ok).getByRole('button', { name: 'JSON' }))
+    await waitFor(() => expect(pedidos).toEqual(['/jobs/j1/download/medicao_fev.pdf']))
+  })
+
+  it('baixar o zip do lote busca como blob, não como link puro', async () => {
+    preparar({ ativos: [umResumo({ job_id: 'j1', completed: false })] })
+    const pedidos: string[] = []
+    servidor.use(
+      http.get('/jobs/j1/download', ({ request }) => {
+        pedidos.push(new URL(request.url).pathname)
+        return HttpResponse.text('zip', { headers: { 'Content-Disposition': 'attachment; filename="j1.zip"' } })
+      }),
+    )
+    const { usuario } = renderApp('/upload')
+    await screen.findByText('medicao_fev.pdf', { selector: 'td' })
+    await usuario.click(screen.getByRole('button', { name: 'Baixar todos os resultados (.zip)' }))
+    await waitFor(() => expect(pedidos).toEqual(['/jobs/j1/download']))
   })
 
   it('tentar de novo reenvia o arquivo que falhou', async () => {
@@ -111,6 +153,6 @@ describe('Upload de PDFs', () => {
     await usuario.click(await screen.findByText('Lotes anteriores (1)'))
     const linha = screen.getByText('20/09/2026 10:00').closest('tr')!
     expect(within(linha).getByText('3 de 3')).toBeInTheDocument()
-    expect(within(linha).getByRole('link', { name: 'Baixar .zip' })).toHaveAttribute('href', '/jobs/antigo/download')
+    expect(within(linha).getByRole('button', { name: 'Baixar .zip' })).toBeInTheDocument()
   })
 })
