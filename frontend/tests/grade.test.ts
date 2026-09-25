@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { REGIOES_ANP } from '../src/api/indices'
 import type { IndiceMensal, SemanaAnp } from '../src/api/tipos'
-import { montarGradeAnp, montarGradeIgpDi } from '../src/pages/indices/grade'
+import { montarGradeAnp, montarGradeIgpDi, REGIOES_FIXAS } from '../src/pages/indices/grade'
 
 let proximoId = 1
 function umaSemana(inicio: string, fim: string, regiao: string, preco: string | null = '3.5'): SemanaAnp {
@@ -15,6 +16,10 @@ function umaSemana(inicio: string, fim: string, regiao: string, preco: string | 
     atualizado_em: '2026-09-24T10:00:00+00:00',
   }
 }
+
+it('REGIOES_FIXAS é derivada de REGIOES_ANP (a mesma lista que o backend aceita), sem manter duas listas', () => {
+  expect(REGIOES_FIXAS).toEqual(REGIOES_ANP.filter((r) => r !== 'Brasil'))
+})
 
 describe('montarGradeAnp', () => {
   it('uma linha por semana, da mais recente, e as cinco regiões fixas antes das extras', () => {

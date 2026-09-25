@@ -1,8 +1,11 @@
+import { REGIOES_ANP } from '../../api/indices'
 import type { IndiceMensal, SemanaAnp } from '../../api/tipos'
 
 // As cinco regiões que os contratos usam ficam sempre na grade, na ordem do
 // mapa; outras (Brasil, por exemplo) entram depois, só se tiverem dados.
-export const REGIOES_FIXAS = ['Norte', 'Nordeste', 'Centro-Oeste', 'Sudeste', 'Sul']
+// Derivada de REGIOES_ANP (a mesma lista que o backend aceita numa semana
+// digitada) para não manter duas listas de região no frontend.
+export const REGIOES_FIXAS = REGIOES_ANP.filter((r) => r !== 'Brasil')
 
 export interface LinhaAnp {
   inicio: string

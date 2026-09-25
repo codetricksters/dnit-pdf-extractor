@@ -2,26 +2,16 @@
 // regiões bloqueiam o cálculo; campos de cabeçalho vazios só geram aviso na
 // planilha.
 
-export const ROTULO_BLOQUEIO = {
-  data_base: 'Data Base',
-  regiao_cap: 'região CAP',
-  regiao_emulsoes: 'região Emulsões',
-} as const
-
-type CodigoBloqueio = keyof typeof ROTULO_BLOQUEIO
-
-function ehBloqueio(campo: string): campo is CodigoBloqueio {
-  return campo in ROTULO_BLOQUEIO
-}
+import { CAMPOS_BLOQUEIO, ehCampoBloqueio } from '../../lib/camposBloqueio'
 
 export type Nivel = 'bloqueado' | 'aviso' | 'completo'
 
 export function bloqueado(faltantes: string[]): boolean {
-  return faltantes.some(ehBloqueio)
+  return faltantes.some(ehCampoBloqueio)
 }
 
 export function situacao(faltantes: string[]): { nivel: Nivel; texto: string } {
-  const bloqueios = faltantes.filter(ehBloqueio).map((c) => ROTULO_BLOQUEIO[c])
+  const bloqueios = faltantes.filter(ehCampoBloqueio).map((c) => CAMPOS_BLOQUEIO[c].rotulo)
   if (bloqueios.length) return { nivel: 'bloqueado', texto: `Falta ${bloqueios.join(' e ')}` }
   const n = faltantes.length
   if (n === 1) return { nivel: 'aviso', texto: '1 campo do cabeçalho vazio' }

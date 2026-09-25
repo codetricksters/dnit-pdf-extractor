@@ -33,7 +33,6 @@ export const chaves = {
   anp: (produto: string, de?: string, ate?: string) => ['anp', produto, de, ate] as const,
   produtosAnp: ['anp-produtos'] as const,
   todosIgpDi: ['igp-di'] as const,
-  igpDi: (de?: string, ate?: string) => ['igp-di', de, ate] as const,
   cobertura: ['cobertura'] as const,
   jobs: (status: 'active' | 'completed') => ['jobs', status] as const,
   templates: ['templates'] as const,
