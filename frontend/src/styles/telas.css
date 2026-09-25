@@ -119,3 +119,36 @@ details.lotes > summary { cursor: pointer; color: var(--text-secondary); }
   .duas-colunas { grid-template-columns: 1fr; }
   .cartoes { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Tabela do cálculo: grupos família → produto, subtotal e total, como na planilha. */
+.data-table tr.linha-familia td {
+  background: var(--surface-container-high);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.data-table tr.linha-produto td {
+  background: var(--surface-container);
+  font-weight: 600;
+}
+
+.data-table tr.linha-subtotal td {
+  height: var(--row-height-subtotal);
+  border-top: 1px solid var(--border-strong);
+  font-weight: 600;
+}
+
+.data-table tr.linha-total td {
+  height: var(--row-height-total);
+  border-top: 2px solid var(--border-structural);
+  background: var(--surface-container-high);
+  font-weight: 700;
+}
+
+.data-table th .letra {
+  display: block;
+  font-family: var(--font-data);
+  color: var(--text-secondary);
+  font-weight: 400;
+}
