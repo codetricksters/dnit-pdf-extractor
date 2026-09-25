@@ -5,6 +5,7 @@ import { calcular, urlPlanilha } from '../../api/contratos'
 import { ErroApi } from '../../api/erros'
 import { buscarCobertura } from '../../api/indices'
 import { FAMILIAS, ROTULO_FAMILIA, type Contrato, type Familia } from '../../api/tipos'
+import { BotaoBaixar } from '../../components/BotaoBaixar'
 import { Carregando } from '../../components/Carregando'
 import { Icone } from '../../components/Icone'
 import { MensagemErro } from '../../components/MensagemErro'
@@ -78,10 +79,14 @@ export function AbaCalculo() {
             </button>
           )}
           {calculo.data && !bloqueio && (
-            <a className="btn btn-primary" href={urlPlanilha(contrato.id, regioes)} download>
+            <BotaoBaixar
+              caminho={urlPlanilha(contrato.id, regioes)}
+              nomeArquivo={calculo.data.arquivo}
+              className="btn btn-primary"
+            >
               <Icone nome="download" />
               <span>Baixar planilha (.xlsx)</span>
-            </a>
+            </BotaoBaixar>
           )}
         </div>
       </div>

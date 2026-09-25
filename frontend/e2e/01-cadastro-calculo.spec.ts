@@ -31,7 +31,7 @@ test('completar o cadastro, calcular, baixar e simular outra região', async ({ 
   await expect(tabela).toContainText('Aquisição de Emulsão RR-1C')
   await expect(tabela.getByRole('row').filter({ hasText: 'Total geral' })).toBeVisible()
 
-  const baixar = page.getByRole('link', { name: 'Baixar planilha (.xlsx)' })
+  const baixar = page.getByRole('button', { name: 'Baixar planilha (.xlsx)' })
   const [planilha] = await Promise.all([page.waitForEvent('download'), baixar.click()])
   expect(planilha.suggestedFilename()).toMatch(/\.xlsx$/)
   expect(planilha.suggestedFilename()).not.toContain('SIMULACAO')

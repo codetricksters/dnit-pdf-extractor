@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Backup, Template } from '../src/api/tipos'
@@ -61,7 +61,7 @@ describe('Templates', () => {
     expect(within(ativo).getByText('Logo novo')).toBeInTheDocument()
     expect(within(ativo).getByText('48 KB')).toBeInTheDocument()
     expect(within(ativo).queryByRole('button', { name: /Excluir/ })).not.toBeInTheDocument()
-    expect(within(ativo).getByRole('link', { name: 'Baixar' })).toHaveAttribute('href', '/admin/templates/2/download')
+    expect(within(ativo).getByRole('button', { name: 'Baixar' })).toBeInTheDocument()
 
     const antigo = screen.getByText('reequilibrio_template.xlsx').closest('tr')!
     expect(within(antigo).getByRole('button', { name: 'Ativar' })).toBeInTheDocument()
@@ -92,6 +92,32 @@ describe('Templates', () => {
     expect(envio.form!.observacao).toBe('Rodapé corrigido')
     expect(envio.form!.ativar).toBe('true')
   })
+
+  it('baixar um template busca como blob, não como link puro', async () => {
+    preparar()
+    const pedidos: string[] = []
+    servidor.use(
+      http.get('/admin/templates/:id/download', ({ request }) => {
+        pedidos.push(new URL(request.url).pathname)
+        return HttpResponse.text('xlsx', { headers: { 'Content-Disposition': 'attachment; filename="reequilibrio_v2.xlsx"' } })
+      }),
+    )
+    const { usuario } = renderApp('/sistema/templates')
+    const ativo = (await screen.findByText('reequilibrio_v2.xlsx')).closest('tr')!
+    await usuario.click(within(ativo).getByRole('button', { name: 'Baixar' }))
+    await waitFor(() => expect(pedidos).toEqual(['/admin/templates/2/download']))
+  })
+
+  it('erro ao baixar o template aparece junto do botão, sem salvar arquivo nenhum', async () => {
+    preparar()
+    servidor.use(
+      http.get('/admin/templates/:id/download', () => HttpResponse.json({ detail: 'Template não encontrado.' }, { status: 404 })),
+    )
+    const { usuario } = renderApp('/sistema/templates')
+    const ativo = (await screen.findByText('reequilibrio_v2.xlsx')).closest('tr')!
+    await usuario.click(within(ativo).getByRole('button', { name: 'Baixar' }))
+    expect(await within(ativo).findByText('Template não encontrado.')).toBeInTheDocument()
+  })
 })
 
 describe('Backups', () => {
@@ -108,7 +134,7 @@ describe('Backups', () => {
     const nome = BACKUPS[0].nome
     const linha = (await screen.findByText(nome)).closest('tr')!
     expect(within(linha).getByText('3,2 MB')).toBeInTheDocument()
-    expect(within(linha).getByRole('link', { name: 'Baixar' })).toHaveAttribute('href', `/admin/backups/${nome}/download`)
+    expect(within(linha).getByRole('button', { name: 'Baixar' })).toBeInTheDocument()
 
     await usuario.click(within(linha).getByRole('button', { name: 'Restaurar' }))
     const dialogo = screen.getByRole('dialog')
@@ -119,5 +145,21 @@ describe('Backups', () => {
 
     expect(chamadas.at(-1)).toMatchObject({ caminho: `/admin/backups/${nome}/restaurar`, form: { confirmacao: nome } })
     expect(await screen.findByText(/dnit_20260924_1010_antes_de_restaurar\.dump/)).toBeInTheDocument()
+  })
+
+  it('baixar um backup busca como blob, não como link puro', async () => {
+    preparar()
+    const nome = BACKUPS[0].nome
+    const pedidos: string[] = []
+    servidor.use(
+      http.get('/admin/backups/:nome/download', ({ request }) => {
+        pedidos.push(new URL(request.url).pathname)
+        return HttpResponse.text('dump', { headers: { 'Content-Disposition': `attachment; filename="${nome}"` } })
+      }),
+    )
+    const { usuario } = renderApp('/sistema/backups')
+    const linha = (await screen.findByText(nome)).closest('tr')!
+    await usuario.click(within(linha).getByRole('button', { name: 'Baixar' }))
+    await waitFor(() => expect(pedidos).toEqual([`/admin/backups/${nome}/download`]))
   })
 })

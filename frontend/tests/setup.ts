@@ -25,6 +25,11 @@ globalThis.Request = RequestNativo as unknown as typeof Request
 globalThis.Response = ResponseNativo as unknown as typeof Response
 globalThis.fetch = fetchNativo as unknown as typeof fetch
 
+// jsdom não implementa URL.createObjectURL: os botões de download (BotaoBaixar)
+// chamam isso para disparar o <a> temporário depois de buscar o blob.
+if (typeof URL.createObjectURL !== 'function') URL.createObjectURL = () => 'blob:mock'
+if (typeof URL.revokeObjectURL !== 'function') URL.revokeObjectURL = () => {}
+
 beforeAll(() => servidor.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
   cleanup()

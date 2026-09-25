@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { chaves } from '../../api/chaves'
 import { enviarBackup, excluirBackup, gerarBackup, listarBackups, restaurarBackup, urlBackup } from '../../api/sistema'
 import type { Backup } from '../../api/tipos'
+import { BotaoBaixar } from '../../components/BotaoBaixar'
 import { Cabecalho } from '../../components/Cabecalho'
 import { Carregando } from '../../components/Carregando'
 import { ConfirmarDialogo } from '../../components/ConfirmarDialogo'
@@ -93,7 +94,7 @@ export function PaginaBackups() {
                     <td>{dataHora(b.criado_em)}</td>
                     <td className="num">{tamanho(b.tamanho)}</td>
                     <td>
-                      <a className="btn btn-sm" href={urlBackup(b.nome)} download>Baixar</a>{' '}
+                      <BotaoBaixar caminho={urlBackup(b.nome)} nomeArquivo={b.nome} className="btn btn-sm">Baixar</BotaoBaixar>{' '}
                       <button type="button" className="btn btn-sm" onClick={() => setRestaurando(b)}>Restaurar</button>{' '}
                       <button type="button" className="btn btn-sm" onClick={() => setExcluindo(b)}>Excluir</button>
                     </td>

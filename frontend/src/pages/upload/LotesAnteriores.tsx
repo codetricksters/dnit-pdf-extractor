@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { chaves } from '../../api/chaves'
 import { listarJobs, urlZip } from '../../api/jobs'
+import { BotaoBaixar } from '../../components/BotaoBaixar'
 import { dataHora } from '../../lib/formato'
 
 export function LotesAnteriores() {
@@ -27,7 +28,9 @@ export function LotesAnteriores() {
                 <td className={l.failed_count > 0 ? 'num neg' : 'num'}>{l.failed_count}</td>
                 <td>
                   {l.completed_count > 0 && (
-                    <a className="btn btn-sm" href={urlZip(l.job_id)} download>Baixar .zip</a>
+                    <BotaoBaixar caminho={urlZip(l.job_id)} nomeArquivo={`${l.job_id}.zip`} className="btn btn-sm">
+                      Baixar .zip
+                    </BotaoBaixar>
                   )}
                 </td>
               </tr>

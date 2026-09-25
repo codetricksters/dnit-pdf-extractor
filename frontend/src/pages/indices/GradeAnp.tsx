@@ -5,6 +5,7 @@ import {
   ANP_PRODUTO_CAP, excluirSemanaAnp, gravarSemanaAnp, listarAnp, listarProdutosAnp, urlExportarAnp,
 } from '../../api/indices'
 import { aposIndices } from '../../api/invalidar'
+import { BotaoBaixar } from '../../components/BotaoBaixar'
 import { CelulaEditavel } from '../../components/CelulaEditavel'
 import { Carregando } from '../../components/Carregando'
 import { ConfirmarDialogo } from '../../components/ConfirmarDialogo'
@@ -82,8 +83,12 @@ export function GradeAnp() {
         </div>
         <button type="submit" className="btn">Filtrar</button>
         <span className="espaco" />
-        <a className="btn" href={urlExportarAnp({ produto, ...periodo, formato: 'xlsx' })} download>Exportar .xlsx</a>
-        <a className="btn" href={urlExportarAnp({ produto, ...periodo, formato: 'csv' })} download>Exportar .csv</a>
+        <BotaoBaixar caminho={urlExportarAnp({ produto, ...periodo, formato: 'xlsx' })} nomeArquivo="indices_anp.xlsx">
+          Exportar .xlsx
+        </BotaoBaixar>
+        <BotaoBaixar caminho={urlExportarAnp({ produto, ...periodo, formato: 'csv' })} nomeArquivo="indices_anp.csv">
+          Exportar .csv
+        </BotaoBaixar>
         <button type="button" className="btn" onClick={() => setImportando(true)}>
           <Icone nome="upload_file" />
           <span>Importar</span>

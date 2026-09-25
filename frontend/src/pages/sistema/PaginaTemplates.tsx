@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { chaves } from '../../api/chaves'
 import { ativarTemplate, enviarTemplate, excluirTemplate, listarTemplates, urlTemplate } from '../../api/sistema'
 import type { Template } from '../../api/tipos'
+import { BotaoBaixar } from '../../components/BotaoBaixar'
 import { Cabecalho } from '../../components/Cabecalho'
 import { Carregando } from '../../components/Carregando'
 import { ConfirmarDialogo } from '../../components/ConfirmarDialogo'
@@ -86,7 +87,7 @@ export function PaginaTemplates() {
                     <td>{dataHora(t.criado_em)}</td>
                     <td className="num">{tamanho(t.tamanho)}</td>
                     <td>
-                      <a className="btn btn-sm" href={urlTemplate(t.id)} download>Baixar</a>{' '}
+                      <BotaoBaixar caminho={urlTemplate(t.id)} nomeArquivo={t.nome} className="btn btn-sm">Baixar</BotaoBaixar>{' '}
                       {!t.ativo && (
                         <>
                           <button type="button" className="btn btn-sm" disabled={ativarUm.isPending} onClick={() => ativarUm.mutate(t.id)}>
