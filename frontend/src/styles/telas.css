@@ -112,6 +112,17 @@
 .lista-erros { margin: var(--space-xs) 0 0 var(--space-md); padding: 0; font-size: 13px; }
 .pre-linha { white-space: pre-line; }
 
+.celula-botao {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
 select.input { appearance: auto; }
 details.lotes > summary { cursor: pointer; color: var(--text-secondary); }
 
