@@ -179,6 +179,77 @@ async def test_gravar_itens_e_idempotente():
     assert len(medicoes_repo.itens_para_export(contrato_id)) == 2
 
 
+async def test_mesmo_codigo_em_dois_grupos_do_mesmo_mes_soma_o_valor():
+    """The same material measured under two work groups in the same PDF.
+
+    Real case: ``10ª MEDIÇÃO PROVISÓRIA.pdf``, código 8300980 — measured
+    under "conservação corretiva" (R$ 145.178,70) and "conservação
+    preventiva" (R$ 197.208,20) in the same month; both are real, both share
+    the group's Fator, and the total the calculation needs is their sum.
+    """
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [
+            _linha("8300980", "AQUISIÇÃO DE CAP 50/70", 145178.70, 0.1963),
+            _linha("8300980", "AQUISIÇÃO DE CAP 50/70", 197208.20, 0.1963),
+        ],
+    )
+    item = medicoes_repo.itens_para_export(contrato_id)[0]
+    assert item["valor_pi"] == Decimal("342386.90")
+    assert item["fator"] == Decimal("0.1963")
+
+
+async def test_linha_de_estorno_com_fator_zero_e_descartada_quando_ha_alternativa():
+    """A reversal line ("EST.QTDE.LQDA. …") always prints Fator 0 — even when
+    it carries a real (negative) value, per DNIT's own convention — and is
+    excluded whenever a real (Fator != 0) occurrence of the same code exists
+    in the same month/file. Real case: ``30ª MP.pdf``, código 60112.
+    """
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [
+            _linha("60112", "AQUISIÇÃO DE CAP 50/70", 11051.10, 0.2369),
+            _linha("60112", "EST.QTDE.LQDA. 8,0 60112 - 1,2,3", -82238.50, 0.0),
+        ],
+    )
+    item = medicoes_repo.itens_para_export(contrato_id)[0]
+    assert item["valor_pi"] == Decimal("11051.10")
+    assert item["fator"] == Decimal("0.2369")
+
+
+async def test_fator_zero_sem_alternativa_e_uma_medicao_real_e_entra_no_calculo():
+    """Fator = 0 alone is not a reversal signal: a code measured for the
+    first time, before its first reajustamento, legitimately has Fator = 0
+    on every occurrence of that (código, mês, arquivo) — there being nothing
+    better to prefer, it is kept and must still enter the calculation.
+
+    Real case: ``rel_resumo_medicoes(44).pdf``, código 92704 (AQUISIÇÃO DE
+    CAP 50/70), a single occurrence with Fator = 0 and R$ 324.880,32.
+    """
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [_linha("92704", "AQUISIÇÃO DE CAP 50/70", 324880.32, 0.0)],
+    )
+    item = medicoes_repo.itens_para_export(contrato_id)[0]
+    assert item["valor_pi"] == Decimal("324880.32")
+    assert item["fator"] == Decimal("0")
+
+
+async def test_reprocessar_o_mesmo_arquivo_nao_dobra_a_soma():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    linhas = [
+        _linha("8300980", "AQUISIÇÃO DE CAP 50/70", 145178.70, 0.1963),
+        _linha("8300980", "AQUISIÇÃO DE CAP 50/70", 197208.20, 0.1963),
+    ]
+    medicoes_repo.gravar_itens(contrato_id, linhas, job_id="job1")
+    medicoes_repo.gravar_itens(contrato_id, linhas, job_id="job2")
+    item = medicoes_repo.itens_para_export(contrato_id)[0]
+    assert item["valor_pi"] == Decimal("342386.90")
+
+
 async def test_linhas_sem_codigo_de_servico_sao_ignoradas():
     contrato_id = contratos_repo.registrar_do_pdf(HEADER)
     resumo = medicoes_repo.gravar_itens(

@@ -84,11 +84,37 @@
    197.208,20) — hoje só o segundo valor é gravado; a soma real é R$
    342.386,90.
 
-   **Status: pendente de decisão do usuário.** Ele vai validar o achado
-   (revisando os PDFs de origem) antes de escolher entre as opções discutidas
-   (somar por código+mês, sem migração; ou incluir o grupo na chave, com
-   migração e mudança no extractor/reequilibrio_export/tela de Medições).
-   Nada foi alterado no código ainda.
+   **Status: resolvido.** O usuário validou com um relatório completo
+   (código, descrição, fator, valor, gerado dos 51 PDFs reais). Primeira
+   regra proposta ("qualquer linha com Fator = 0 nunca entra no cálculo")
+   foi **revisada e corrigida** antes de fechar: uma revisão focada (dado o
+   impacto financeiro) achou, com dados reais do próprio banco, contratos com
+   medições inteiras — não estornos — em que **todas** as ocorrências de um
+   código têm `Fator = 0` (ex.: `rel_resumo_medicoes(44).pdf`, código `92704`
+   AQUISIÇÃO DE CAP 50/70, ocorrência única, R$ 324.880,32, `Fator = 0` — é a
+   primeira medição do material, antes do primeiro reajustamento, não um
+   estorno). Descartar toda linha com `Fator = 0` incondicionalmente teria
+   zerado essas medições reais, um erro pior que o bug original.
+
+   **Regra final:** uma ocorrência com `Fator = 0` só é descartada quando
+   existe, no mesmo (código, mês, arquivo), **outra** ocorrência com
+   `Fator != 0` — nesse caso as ocorrências com `Fator != 0` são somadas e a
+   de `Fator = 0` (o estorno/auditoria) sai do cálculo, mesmo carregando um
+   valor real (há estornos com "Valor a PI Líquido" negativo, ex. `30ª
+   MP.pdf` código `60112`: -R$ 82.238,50). Quando **todas** as ocorrências
+   têm `Fator = 0` (nenhuma alternativa melhor existe), elas são mantidas e
+   somadas como estão — é a única medição real que existe para aquele
+   código naquele mês.
+
+   Implementado em `medicoes_repo.gravar_itens`, com um aviso de log quando o
+   `Fator` diverge entre as ocorrências não-descartadas do mesmo grupo (não
+   deveria acontecer — confirmado sem exceção nos 51 PDFs reais — mas não
+   deveria passar em silêncio se acontecer). Validado de ponta a ponta contra
+   os 51 PDFs reais (via um contrato sintético, apagado depois). Testes
+   cobrindo os quatro casos (soma de dois grupos reais, estorno com valor
+   negativo descartado por ter alternativa, medição real única com Fator = 0
+   mantida, reprocessamento não dobra a soma). Suíte completa: 329 passed, 9
+   skipped.
 10. **Branch remoto `feat/postgres-indices-delta-p` continua existindo** em
     `origin`, aparentemente já superado pelo trabalho atual. Confirmar que pode
     ser removido antes de apagar.
@@ -107,8 +133,17 @@
 
 ## Perguntas para o usuário
 
-- Item 9: usuário está validando o achado por conta própria antes de decidir
-  entre "somar por código+mês" e "incluir o grupo na chave" (ver detalhes no
-  item 9 acima). Não prosseguir com código até ele voltar com a decisão.
 - Item 10: ainda não decidido se remove o branch remoto
   `feat/postgres-indices-delta-p` agora ou depois.
+
+## Dívida deixada pelo item 9
+
+- **Dados já gravados no banco não se corrigem automaticamente.**
+  `gravar_itens` só insere/atualiza, nunca apaga — reprocessar um PDF corrige
+  as chaves que tinham alguma ocorrência descartada incorretamente, mas uma
+  chave cujas ocorrências *todas* já foram gravadas (uma por uma, cada
+  sobrescrevendo a anterior) só fica com o valor certo depois que o PDF for
+  reenviado. Nenhuma migração de dados foi feita nesta rodada — se o banco de
+  produção tiver contratos processados antes desta correção, os PDFs
+  precisam ser reenviados (ou uma migração escrita) para os valores ficarem
+  certos.

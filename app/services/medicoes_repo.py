@@ -5,6 +5,7 @@ Replaces the previous arrangement where the dashboard globbed
 crossed with them. The JSON files remain as the extraction artefact.
 """
 
+import logging
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -12,6 +13,8 @@ from decimal import Decimal, InvalidOperation
 from ..db import acquire_sync
 from .catalogo import padrao_ilike
 from .contratos_repo import mes_da_medicao
+
+logger = logging.getLogger(__name__)
 
 # Same rule the extractor uses to recognise a record: a 4+-digit service code.
 # Anything else on that column ("SUBTOTAL", section labels) is not an item.
@@ -43,8 +46,26 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
     Every item with a service code is stored, associated in the catalogue or
     not: associating a code later brings its past items into the calculation
     without reprocessing the PDFs.
+
+    A service code can recur within the same month/file across more than one
+    work group of the contract (e.g. the same material measured under both
+    "conservação corretiva" and "conservação preventiva"), or as a reversal/
+    audit line the PDF prints under "ESTORNOS/RESSARCIMENTOS" with ``Fator``
+    always ``0`` — real or not (a reversal can carry a genuine, sometimes
+    negative, ``Valor a PI Líquido``). ``Fator = 0`` on its own is **not** a
+    reliable "this line is a reversal" signal: a code measured for the first
+    time, before its first reajustamento, legitimately has ``Fator = 0`` too
+    — and there ``Fator = 0`` is every occurrence of that (código, mês,
+    arquivo), because no other group offers anything better.
+
+    So the rule only discards a ``Fator = 0`` occurrence when a **better**
+    occurrence exists for the same (código, mês, arquivo) — one with
+    ``Fator != 0``: those are summed, keeping the shared ``Fator`` (confirmed
+    identical across every real occurrence within one file). When every
+    occurrence of a (código, mês, arquivo) has ``Fator = 0``, they are kept
+    and summed as-is — there being nothing else to prefer over them.
     """
-    registros = []
+    grupos: dict[tuple[str, date, str], list[dict]] = {}
 
     for row in rows:
         codigo = str(row.get("Serviço") or "").strip()
@@ -56,15 +77,36 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
         if mes is None or valor_pi is None or fator is None:
             continue
 
+        source_file = str(row.get("Source_File") or "")
+        chave = (codigo, mes, source_file)
+        grupos.setdefault(chave, []).append(
+            {
+                "descricao_pdf": str(row.get("Descrição") or "").strip(),
+                "valor_pi": valor_pi,
+                "fator": fator,
+            }
+        )
+
+    registros = []
+    for (codigo, mes, source_file), ocorrencias in grupos.items():
+        com_fator = [o for o in ocorrencias if o["fator"] != 0] or ocorrencias
+        fatores = {o["fator"] for o in com_fator}
+        if len(fatores) > 1:
+            logger.warning(
+                "'%s' código %s, %s: fatores divergentes entre ocorrências (%s);"
+                " usando o da primeira.",
+                source_file, codigo, mes, sorted(fatores),
+            )
+        primeira = com_fator[0]
         registros.append(
             {
                 "contrato_id": contrato_id,
                 "codigo_servico": codigo,
-                "descricao_pdf": str(row.get("Descrição") or "").strip(),
+                "descricao_pdf": primeira["descricao_pdf"],
                 "mes_medicao": mes,
-                "valor_pi": valor_pi,
-                "fator": fator,
-                "source_file": str(row.get("Source_File") or ""),
+                "valor_pi": sum(o["valor_pi"] for o in com_fator),
+                "fator": primeira["fator"],
+                "source_file": source_file,
                 "job_id": job_id,
             }
         )
