@@ -139,11 +139,12 @@
 ## Dívida deixada pelo item 9
 
 - **Dados já gravados no banco não se corrigem automaticamente.**
-  `gravar_itens` só insere/atualiza, nunca apaga — reprocessar um PDF corrige
-  as chaves que tinham alguma ocorrência descartada incorretamente, mas uma
-  chave cujas ocorrências *todas* já foram gravadas (uma por uma, cada
-  sobrescrevendo a anterior) só fica com o valor certo depois que o PDF for
-  reenviado. Nenhuma migração de dados foi feita nesta rodada — se o banco de
-  produção tiver contratos processados antes desta correção, os PDFs
-  precisam ser reenviados (ou uma migração escrita) para os valores ficarem
-  certos.
+  `gravar_itens` só insere/atualiza, nunca apaga. Valores gravados antes desta
+  correção (pela regra antiga, "a última ocorrência vence") continuam errados
+  até o PDF ser reenviado; como as chaves que a regra nova e a antiga geram
+  são as mesmas, reenviar o PDF corrige de uma vez todas as chaves daquele
+  arquivo — não é preciso reenviar por código. Nenhuma migração de dados foi
+  feita nesta rodada: se o banco de produção tiver contratos processados
+  antes desta correção, os PDFs precisam ser reenviados para os valores
+  ficarem certos, e qualquer planilha já exportada a partir deles precisa ser
+  gerada de novo.

@@ -210,8 +210,11 @@ async def test_linha_de_estorno_com_fator_zero_e_descartada_quando_ha_alternativ
     medicoes_repo.gravar_itens(
         contrato_id,
         [
-            _linha("60112", "AQUISIÇÃO DE CAP 50/70", 11051.10, 0.2369),
+            # The reversal comes first: a rule that just kept "the first
+            # occurrence" would fail here (it would return the -82238.50,
+            # fator 0), same as a rule that summed everything unconditionally.
             _linha("60112", "EST.QTDE.LQDA. 8,0 60112 - 1,2,3", -82238.50, 0.0),
+            _linha("60112", "AQUISIÇÃO DE CAP 50/70", 11051.10, 0.2369),
         ],
     )
     item = medicoes_repo.itens_para_export(contrato_id)[0]
@@ -235,6 +238,23 @@ async def test_fator_zero_sem_alternativa_e_uma_medicao_real_e_entra_no_calculo(
     )
     item = medicoes_repo.itens_para_export(contrato_id)[0]
     assert item["valor_pi"] == Decimal("324880.32")
+    assert item["fator"] == Decimal("0")
+
+
+async def test_varias_ocorrencias_com_fator_zero_sem_alternativa_somam():
+    """Same as above, but more than one occurrence — none of them a better
+    alternative — still sum, not just the singleton case.
+    """
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(
+        contrato_id,
+        [
+            _linha("92704", "AQUISIÇÃO DE CAP 50/70", 100.0, 0.0),
+            _linha("92704", "AQUISIÇÃO DE CAP 50/70", 50.0, 0.0),
+        ],
+    )
+    item = medicoes_repo.itens_para_export(contrato_id)[0]
+    assert item["valor_pi"] == Decimal("150.0")
     assert item["fator"] == Decimal("0")
 
 

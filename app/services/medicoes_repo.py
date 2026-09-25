@@ -90,6 +90,14 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
     registros = []
     for (codigo, mes, source_file), ocorrencias in grupos.items():
         com_fator = [o for o in ocorrencias if o["fator"] != 0] or ocorrencias
+        if com_fator is not ocorrencias:
+            for descartada in ocorrencias:
+                if descartada["fator"] == 0 and descartada["valor_pi"] != 0:
+                    logger.warning(
+                        "'%s' código %s, %s: ocorrência com Fator 0 e valor"
+                        " %s descartada (existe alternativa com Fator != 0).",
+                        source_file, codigo, mes, descartada["valor_pi"],
+                    )
         fatores = {o["fator"] for o in com_fator}
         if len(fatores) > 1:
             logger.warning(
