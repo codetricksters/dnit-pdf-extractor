@@ -115,9 +115,9 @@
    negativo descartado por ter alternativa, medição real única com Fator = 0
    mantida, reprocessamento não dobra a soma). Suíte completa: 329 passed, 9
    skipped.
-10. **Branch remoto `feat/postgres-indices-delta-p` continua existindo** em
-    `origin`, aparentemente já superado pelo trabalho atual. Confirmar que pode
-    ser removido antes de apagar.
+10. **Branch remoto `feat/postgres-indices-delta-p`.** **Resolvido** — o
+    usuário confirmou que está superado (tudo já está em `master`) e pediu a
+    remoção; removido de `origin`.
 11. **`build_template.py` lê a planilha `Reequilíbrio - 26 - Contrato
     716-22.xlsx`.** Investigado nesta rodada: é o uso **legítimo e documentado**
     dessa planilha — `build_template.py` é a ferramenta manual que deriva o
@@ -133,8 +133,8 @@
 
 ## Perguntas para o usuário
 
-- Item 10: ainda não decidido se remove o branch remoto
-  `feat/postgres-indices-delta-p` agora ou depois.
+Nenhuma pendente — todos os itens 1 a 12 estão resolvidos (a dívida de dados
+antigos deixada pelo item 9 continua registrada na seção acima).
 
 ## Dívida deixada pelo item 9
 
