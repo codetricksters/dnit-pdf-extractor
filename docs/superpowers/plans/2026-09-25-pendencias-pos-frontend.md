@@ -84,11 +84,25 @@
    197.208,20) — hoje só o segundo valor é gravado; a soma real é R$
    342.386,90.
 
-   **Status: pendente de decisão do usuário.** Ele vai validar o achado
-   (revisando os PDFs de origem) antes de escolher entre as opções discutidas
-   (somar por código+mês, sem migração; ou incluir o grupo na chave, com
-   migração e mudança no extractor/reequilibrio_export/tela de Medições).
-   Nada foi alterado no código ainda.
+   **Status: resolvido.** O usuário validou com um relatório completo
+   (código, descrição, fator, valor, gerado dos 51 PDFs reais) e decidiu a
+   regra: **o `Fator` nunca é zero numa linha real — só nas linhas de estorno/
+   auditoria — e o fator pode mudar de um arquivo/mês para outro, mas não
+   varia entre ocorrências do mesmo código dentro do mesmo arquivo/mês**
+   (confirmado sem exceção nos 51 PDFs). A regra final:
+
+   - Qualquer linha com `Fator = 0` é descartada por completo — mesmo quando
+     carrega um valor (existem estornos reais com "Valor a PI Líquido"
+     negativo e `Fator = 0`, ex. `30ª MP.pdf` código `60112`: -R$ 82.238,50).
+   - Entre as linhas restantes (`Fator != 0`) do mesmo código+mês+arquivo, o
+     `Valor a PI Líquido` é somado; o `Fator` gravado é o compartilhado por
+     elas (confirmado idêntico nos 51 PDFs, nunca precisou de uma regra de
+     empate).
+
+   Implementado em `medicoes_repo.gravar_itens` (commit a seguir), com testes
+   cobrindo os três casos reais (soma de dois grupos, estorno com valor
+   negativo excluído, grupo real + estorno no meio). Suíte completa: 328
+   passed, 9 skipped.
 10. **Branch remoto `feat/postgres-indices-delta-p` continua existindo** em
     `origin`, aparentemente já superado pelo trabalho atual. Confirmar que pode
     ser removido antes de apagar.
@@ -107,8 +121,5 @@
 
 ## Perguntas para o usuário
 
-- Item 9: usuário está validando o achado por conta própria antes de decidir
-  entre "somar por código+mês" e "incluir o grupo na chave" (ver detalhes no
-  item 9 acima). Não prosseguir com código até ele voltar com a decisão.
 - Item 10: ainda não decidido se remove o branch remoto
   `feat/postgres-indices-delta-p` agora ou depois.

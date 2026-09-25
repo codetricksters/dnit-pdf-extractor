@@ -43,8 +43,19 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
     Every item with a service code is stored, associated in the catalogue or
     not: associating a code later brings its past items into the calculation
     without reprocessing the PDFs.
+
+    A service code can recur within the same month/file across more than one
+    work group of the contract (e.g. the same material measured under both
+    "conservação corretiva" and "conservação preventiva"), or as a zeroed-out
+    reversal/audit line the PDF prints under "ESTORNOS/RESSARCIMENTOS" with
+    ``Fator`` always ``0`` — the DNIT PDF never assigns a real factor to those
+    lines, real or not. A row whose ``Fator`` is ``0`` never enters the
+    calculation; every other occurrence of the same
+    (código, mês, arquivo) has its ``Valor a PI Líquido`` summed into one row,
+    keeping the shared ``Fator`` (confirmed identical across real occurrences
+    within one file) and the description of the first one seen.
     """
-    registros = []
+    acumulados: dict[tuple[str, date, str], dict] = {}
 
     for row in rows:
         codigo = str(row.get("Serviço") or "").strip()
@@ -55,19 +66,30 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
         fator = _decimal(row.get("Fator"))
         if mes is None or valor_pi is None or fator is None:
             continue
+        if fator == 0:
+            # Reversal/audit line ("EST.QTDE.LQDA. …"): the PDF always prints
+            # Fator 0 here and it never enters the calculation, whether or
+            # not the line itself carries a value.
+            continue
 
-        registros.append(
-            {
+        source_file = str(row.get("Source_File") or "")
+        chave = (codigo, mes, source_file)
+        existente = acumulados.get(chave)
+        if existente is None:
+            acumulados[chave] = {
                 "contrato_id": contrato_id,
                 "codigo_servico": codigo,
                 "descricao_pdf": str(row.get("Descrição") or "").strip(),
                 "mes_medicao": mes,
                 "valor_pi": valor_pi,
                 "fator": fator,
-                "source_file": str(row.get("Source_File") or ""),
+                "source_file": source_file,
                 "job_id": job_id,
             }
-        )
+        else:
+            existente["valor_pi"] += valor_pi
+
+    registros = list(acumulados.values())
 
     if registros:
         with acquire_sync() as conn:
