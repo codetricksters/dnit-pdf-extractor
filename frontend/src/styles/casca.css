@@ -76,10 +76,16 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  width: 100%;
   padding: var(--space-xs) var(--space-sm);
   min-height: 34px;
+  border: none;
   border-radius: var(--radius-lg);
+  background: none;
   color: var(--on-surface-variant);
+  font: inherit;
+  text-align: left;
+  box-sizing: border-box;
   transition: background-color 0.15s, color 0.15s;
   cursor: pointer;
 }
