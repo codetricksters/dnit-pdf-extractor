@@ -12,6 +12,7 @@ import { dataHora, exato, mesAno } from '../../lib/formato'
 import { FaixaCobertura } from './FaixaCobertura'
 import { montarGradeIgpDi } from './grade'
 import { ImportarIndices } from './ImportarIndices'
+import { NovoIndice } from './NovoIndice'
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
@@ -20,6 +21,7 @@ export function GradeIgpDi() {
   const indices = useQuery({ queryKey: chaves.todosIgpDi, queryFn: listarIgpDi })
   const grade = useMemo(() => montarGradeIgpDi(indices.data ?? [], new Date().getFullYear()), [indices.data])
   const [importando, setImportando] = useState(false)
+  const [novoIndice, setNovoIndice] = useState(false)
 
   async function depois<T>(acao: Promise<T>) {
     await acao
@@ -34,9 +36,13 @@ export function GradeIgpDi() {
         <BotaoBaixar caminho={URL_TEMPLATE_IGP_DI} nomeArquivo="igp_di_template.xlsx">Baixar template</BotaoBaixar>
         <BotaoBaixar caminho={urlExportarIgpDi('xlsx')} nomeArquivo="igp_di.xlsx">Exportar .xlsx</BotaoBaixar>
         <BotaoBaixar caminho={urlExportarIgpDi('csv')} nomeArquivo="igp_di.csv">Exportar .csv</BotaoBaixar>
-        <button type="button" className="btn btn-primary" onClick={() => setImportando(true)}>
+        <button type="button" className="btn" onClick={() => setImportando(true)}>
           <Icone nome="upload_file" />
           <span>Importar</span>
+        </button>
+        <button type="button" className="btn btn-primary" onClick={() => setNovoIndice(true)}>
+          <Icone nome="add" />
+          <span>Novo índice</span>
         </button>
       </div>
 
@@ -82,6 +88,7 @@ export function GradeIgpDi() {
         </section>
       )}
 
+      {novoIndice && <NovoIndice aoFechar={() => setNovoIndice(false)} />}
       {importando && <ImportarIndices serie="igp-di" aoFechar={() => setImportando(false)} />}
     </>
   )

@@ -204,6 +204,27 @@ describe('Índices', () => {
     expect(screen.getByRole('button', { name: 'Baixar template' })).toBeInTheDocument()
   })
 
+  it('novo índice grava um mês pelo diálogo e recusa valor ilegível', async () => {
+    const escritas = preparar()
+    const { usuario } = renderApp('/indices/igp-di')
+    await usuario.click(await screen.findByRole('button', { name: 'Novo índice' }))
+    const dialogo = screen.getByRole('dialog')
+    await usuario.selectOptions(within(dialogo).getByLabelText('Mês'), 'abril')
+    await usuario.clear(within(dialogo).getByLabelText('Ano'))
+    await usuario.type(within(dialogo).getByLabelText('Ano'), '2027')
+    await usuario.type(within(dialogo).getByLabelText('Valor do índice'), 'abc')
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Gravar' }))
+    expect(within(dialogo).getByText(/Número ilegível/)).toBeInTheDocument()
+    expect(escritas).toHaveLength(0)
+
+    await usuario.clear(within(dialogo).getByLabelText('Valor do índice'))
+    await usuario.type(within(dialogo).getByLabelText('Valor do índice'), '1090,1')
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Gravar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(escritas[0]).toMatchObject({ metodo: 'PUT', corpo: { valor: '1090.1' } })
+    expect(escritas[0].url).toContain('/igp-di/2027-04')
+  })
+
   it('baixar o template do IGP-DI busca como blob, não como link puro', async () => {
     preparar()
     const pedidos: string[] = []
