@@ -70,7 +70,7 @@ e o proxy do Vite desvia para `index.html` o GET que pede `text/html`.
   chega como veio do `NUMERIC` e nunca vira `number`.
 - `api/chaves.ts` — todas as chaves do TanStack Query, num lugar só.
 - `api/invalidar.ts` — o que cada gravação invalida (`aposCadastro`,
-  `aposCatalogo`, `aposIndices`, `aposUpload`). Gravar nunca atualiza o cache à
+  `aposMedicao`, `aposCatalogo`, `aposIndices`, `aposUpload`). Gravar nunca atualiza o cache à
   mão: invalida e a tela relê do banco. Restaurar um backup invalida **tudo**.
 
 ## Regras de tela
@@ -85,8 +85,8 @@ e o proxy do Vite desvia para `index.html` o GET que pede `text/html`.
   `MensagemErro` (o `detail` e a lista `erros`). O frontend só redige mensagens
   que o backend não tem (campo ilegível antes de enviar, arquivo que não é PDF).
 - **Ações destrutivas pedem confirmação** com `ConfirmarDialogo`: excluir
-  produto, apagar semana ou mês (ANP e IGP-DI, na grade ou na célula), excluir
-  template ou backup. Restaurar backup exige ainda digitar o nome
+  produto, registro de medição, apagar semana ou mês (ANP e IGP-DI, na grade ou
+  na célula), excluir template ou backup. Restaurar backup exige ainda digitar o nome
   (`textoExigido`).
 - **Sem emoji; sem CDN.** Ícones são Material Symbols Outlined da fonte
   auto-hospedada, via `<Icone nome="…" />` (`aria-hidden="true"`), sempre ao lado

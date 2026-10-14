@@ -88,8 +88,10 @@ query.
 ### medicoes_repo.py
 
 `gravar_itens(contrato_id, rows, job_id=None)` is idempotent through
-`UNIQUE (contrato_id, codigo_servico, mes_medicao, source_file)` plus
-`ON CONFLICT … DO UPDATE`, so reprocessing the same PDF does not duplicate rows.
+the partial unique index `uq_medicao_item_pdf` (`contrato_id, codigo_servico,
+mes_medicao, source_file WHERE origem <> 'manual'`) plus `ON CONFLICT … DO UPDATE
+… WHERE origem = 'pdf' AND NOT excluido`: reprocessing the same PDF does not
+duplicate rows, and never overwrites or brings back what the user edited or deleted.
 `itens_para_export` returns the rows joined to the catalogue — only associated
 codes. `gravar_itens` returns the number of items stored.
 
@@ -97,6 +99,19 @@ codes. `gravar_itens` returns the number of items stored.
 *Medições* tab: every extracted item of the contract with its associated product
 (or none), `no_calculo` filtering on whether the code has one, `q` matching code
 or description with `ILIKE`.
+
+Records can be edited one at a time. `medicao_item.origem` is `'pdf'` (extracted,
+still updated by reprocessing), `'editado'` (extracted, then changed by the user)
+or `'manual'` (created by the user, `source_file = 'manual'`). `incluir_item`,
+`atualizar_item`, `excluir_item` and `buscar_item` validate everything before
+opening the transaction and refuse with `MedicaoInvalida`. **Código and mês of an
+extracted record are locked**: they are the key with which reprocessing finds the
+row again, so changing them would duplicate it; to fix them, delete the record
+and add a manual one. Deleting is **logical** for an extracted record
+(`excluido = true`, so the PDF does not bring it back) and a real `DELETE` for a
+manual one. `regiao_cap`/`regiao_emulsoes` pin an ANP region on the record
+(normalised against `cobertura()["regioes"]`; empty means follow the contract).
+`listar_itens` and `itens_para_export` ignore `excluido`.
 
 ### catalogo.py
 
@@ -190,7 +205,22 @@ is reported in `avisos` and in the filename (`…_SIMULACAO_CAP-Sul.xlsx`).
 (`data_base`, `regiao_<familia>`) and prose strings for missing índices, all
 collected at once rather than stopping at the first — `regioes_efetivas` checks
 every família in an override before raising, and `calcular`/`_deltas` walk every
-(família, mês) the export needs.
+(família, mês, região) the export needs.
+
+**Region precedence: record > simulation > registration.** `_anotar_regioes`
+writes into each item its `regiao` (the effective one) and `regiao_manual` (the
+one pinned on the record, else `None`). ΔP is computed per `(família, mês,
+região)`, and `montar_grupos` aggregates by produto × mês × fator × `regiao_manual`:
+a record with a region of its own keeps its own row (`Linha.regiao_manual`) and
+is exposed as `regiao_manual` in `serializar`. A `manual` record is never
+discarded as a "same PDF uploaded twice" repeat. A missing índice for a pinned
+region lands in `faltando` like any other. `avisos` reports how many records use
+their own region.
+
+In the file, such a row has `*` appended to its description formula, a fill and a
+note below the total (`MARCA_REGIAO_MANUAL`, `COR_REGIAO_MANUAL`,
+`NOTA_REGIAO_MANUAL` in `reequilibrio_layout.py`); formulas F, H, I and J are
+unchanged and column G stays a literal.
 
 ### Live formulas
 
@@ -296,7 +326,10 @@ Endpoints that exist for the React interface: `GET /contratos/{id}/medicoes?mes=
 (404 for an unknown contract), `GET /codigos?produto_id=`,
 `PUT /produtos/{id}/codigos` with `{"codigos": [...]}` (404 for an unknown
 product), `GET /indices/anp/produtos`, `manuais` in each series of
-`GET /indices/cobertura`, and `arquivo` in the cálculo JSON — the filename the
+`GET /indices/cobertura`, `POST /contratos/{id}/medicoes` (201),
+`PATCH /contratos/{id}/medicoes/{item_id}` and `DELETE …/{item_id}` (204) — 404
+for an unknown contract or record, `MedicaoInvalida` becomes `ErroApi(422)` with a
+text `detail` of `campo: mensagem` lines — and `arquivo` in the cálculo JSON — the filename the
 spreadsheet download would get, so the screen can show it during a simulation.
 
 Two different shapes of 422 reach the client, and there is no global exception

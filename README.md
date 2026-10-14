@@ -74,6 +74,13 @@ Subtrecho, Segmento, Extensão, Contratada) são cadastrados por contrato e
 preenchem o cabeçalho da planilha. A *Data Base* vem sugerida pelo PDF e pode ser
 corrigida; a região da ANP de cada família é obrigatória para calcular.
 
+**Medições editáveis.** Na aba *Medições* é possível corrigir, incluir e excluir
+registros um a um. Em cada registro dá para fixar a região da ANP de CAP e/ou de
+Emulsões: ele passa a ser calculado por essa região, que vale mais que a do
+cadastro e que a simulação, e aparece na tela e na planilha como uma linha
+própria, marcada com `*`, colorida e com uma nota. Quando o PDF é reenviado, o
+que foi editado ou incluído à mão é preservado e o que foi excluído não volta.
+
 **Templates e backup pela interface.** Quem roda em Docker não precisa de
 `docker cp` nem de terminal: enviar, baixar, ativar e excluir templates, e gerar,
 listar, baixar, enviar, restaurar e excluir backups do banco — tudo por tela. O
