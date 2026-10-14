@@ -76,6 +76,9 @@ class Linha:
     valor_pi: Decimal
     fator: Decimal
     delta_p: Decimal
+    # A região fixada no registro, quando difere da família (None = segue o
+    # contrato ou a simulação). Faz a linha separada, marcada com '*'.
+    regiao_manual: str | None = None
 
 
 @dataclass
@@ -111,7 +114,8 @@ class Calculo:
 CENTAVO = Decimal("0.01")
 
 
-def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date], Decimal]) -> tuple[list[Grupo], int]:
+def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date, str | None], Decimal]
+) -> tuple[list[Grupo], int]:
     """Turn measurement items into the spreadsheet's product blocks.
 
     Items arrive ordered família → produto → mês from ``itens_para_export``.
@@ -120,7 +124,8 @@ def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date], Decimal]) ->
     map onto one product: their ``Valor a PI`` is summed, as one spreadsheet row
     per month is what the reference layout has. They are only summed when the
     ``Fator`` matches — a differing fator means a different reajustamento, and
-    blending them would corrupt column F. Those keep separate rows.
+    blending them would corrupt column F. Those keep separate rows. Items with a
+    region of their own (``regiao_manual``) keep separate rows too: their ΔP differs.
 
     The same code, month and product arriving from two ``source_file`` values is
     the same measurement uploaded under two names. Summing it would silently
@@ -130,6 +135,10 @@ def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date], Decimal]) ->
     por_codigo: dict[tuple[str, str, date], dict] = {}
     descartadas = 0
     for item in itens:
+        # Um registro manual é deliberado, não um PDF reenviado com outro nome.
+        if item.get("origem") == "manual":
+            por_codigo[("manual", item["id"])] = item
+            continue
         chave = (item["descricao_export"], item["codigo_servico"], item["mes_medicao"])
         if chave in por_codigo:
             descartadas += 1
@@ -138,18 +147,21 @@ def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date], Decimal]) ->
 
     grupos: list[Grupo] = []
     atual: Grupo | None = None
-    acumulado: dict[tuple[date, Decimal], Decimal] = {}
+    acumulado: dict[tuple[date, Decimal, str | None, str | None], Decimal] = {}
 
     def fechar() -> None:
         if atual is None:
             return
-        for (mes, fator), valor in sorted(acumulado.items()):
+        for (mes, fator, regiao, manual), valor in sorted(
+            acumulado.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][3] or "")
+        ):
             atual.linhas.append(
                 Linha(
                     mes=mes,
                     valor_pi=valor,
                     fator=fator,
-                    delta_p=deltas[(atual.familia, mes)],
+                    delta_p=deltas[(atual.familia, mes, regiao)],
+                    regiao_manual=manual,
                 )
             )
         if atual.linhas:
@@ -160,7 +172,7 @@ def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date], Decimal]) ->
             fechar()
             atual = Grupo(descricao=item["descricao_export"], familia=item["familia"])
             acumulado = {}
-        chave = (item["mes_medicao"], item["fator"])
+        chave = (item["mes_medicao"], item["fator"], item.get("regiao"), item.get("regiao_manual"))
         acumulado[chave] = acumulado.get(chave, Decimal(0)) + item["valor_pi"]
     fechar()
 
@@ -334,28 +346,37 @@ def regioes_efetivas(contrato: dict, override: dict | None = None) -> tuple[dict
     return efetivas, simuladas
 
 
+def _anotar_regioes(itens: list[dict], regioes: dict) -> None:
+    """A região de cada item: a fixada no registro vence a da família
+    (cadastro ou simulação). Grava ``regiao`` e ``regiao_manual`` no item."""
+    for item in itens:
+        manual = item.get(f"regiao_{item['familia'].lower()}")
+        item["regiao_manual"] = manual
+        item["regiao"] = manual or regioes.get(item["familia"])
+
+
 def _deltas(
     contrato: dict, itens: list[dict], regioes: dict
 ) -> tuple[dict, list[str], list[str]]:
-    """ΔP por (família, mês), com todo problema — não só o primeiro.
+    """ΔP por (família, mês, região), com todo problema — não só o primeiro.
 
-    Cada (família, mês) só é examinado uma vez: a região e a Data Base são as
-    mesmas para todo item daquela chave, então o resultado seria idêntico.
+    Cada chave só é examinada uma vez: a Data Base é a mesma para todo item
+    daquela chave, então o resultado seria idêntico. A região é a do item
+    (ver ``_anotar_regioes``).
     """
     fonte = FonteBanco()
-    deltas: dict[tuple[str, date], Decimal] = {}
+    deltas: dict[tuple[str, date, str | None], Decimal] = {}
     faltando: list[str] = []
     mensagens: list[str] = []
-    processados: set[tuple[str, date]] = set()
+    processados: set[tuple[str, date, str | None]] = set()
 
     for item in itens:
-        chave = (item["familia"], item["mes_medicao"])
+        chave = (item["familia"], item["mes_medicao"], item.get("regiao"))
         if chave in processados:
             continue
         processados.add(chave)
-        familia, mes_medicao = chave
+        familia, mes_medicao, regiao = chave
 
-        regiao = regioes.get(familia)
         if not regiao:
             codigo = f"regiao_{familia.lower()}"
             texto = f"{codigo}: escolha a região da ANP para a família {familia}."
@@ -388,6 +409,7 @@ def calcular_deltas(
     blocks the export: a spreadsheet missing ΔP would look complete and be wrong.
     """
     regioes, _ = regioes_efetivas(contrato, regioes_override)
+    _anotar_regioes(itens, regioes)
     deltas, faltando, _ = _deltas(contrato, itens, regioes)
     return deltas, faltando
 
@@ -408,6 +430,7 @@ def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
             "Associe os códigos no catálogo ou processe as medições."
         )
 
+    _anotar_regioes(itens, regioes)
     deltas, faltando, mensagens = _deltas(contrato, itens, regioes)
     if faltando:
         raise ExportacaoImpossivel(
@@ -426,6 +449,12 @@ def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
         avisos.append(
             f"{descartadas} linha(s) repetida(s) foram ignoradas: a mesma medição "
             "consta de mais de um arquivo enviado."
+        )
+    proprias = sum(1 for i in itens if i.get("regiao_manual"))
+    if proprias:
+        avisos.append(
+            f"{proprias} registro(s) com região própria: calculados pela região do "
+            "registro, não pela do contrato nem pela simulação."
         )
     faltam_cadastro = contratos_repo.campos_faltantes(contrato)
     if faltam_cadastro:
@@ -476,7 +505,8 @@ def serializar(calculo: Calculo) -> dict:
             e = c - b
             f = e * fator_lucro
             linhas.append({"mes": linha.mes, "a": linha.valor_pi, "fator": linha.fator,
-                           "b": b, "d": linha.delta_p, "c": c, "e": e, "f": f})
+                           "b": b, "d": linha.delta_p, "c": c, "e": e, "f": f,
+                           "regiao_manual": linha.regiao_manual})
             subtotal += f
         familia["produtos"].append(
             {"descricao": grupo.descricao, "subtotal": subtotal, "linhas": linhas}

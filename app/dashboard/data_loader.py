@@ -61,7 +61,7 @@ def load_reequilibrio_data(numero_contrato: str) -> tuple[dict[str, pd.DataFrame
 
     deltas, faltando = calcular_deltas(contrato, itens)
     # Only the items whose ΔP could be computed can become rows.
-    utilizaveis = [i for i in itens if (i["familia"], i["mes_medicao"]) in deltas]
+    utilizaveis = [i for i in itens if (i["familia"], i["mes_medicao"], i.get("regiao")) in deltas]
     grupos, _descartadas = montar_grupos(utilizaveis, deltas)
 
     return {grupo.descricao: _tabela(grupo) for grupo in grupos}, faltando

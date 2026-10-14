@@ -206,7 +206,7 @@ def _item(descricao, familia, codigo, mes, valor, fator="-0.1839"):
 
 async def test_codigos_diferentes_do_mesmo_produto_somam_no_mes():
     """One row per month per product, as in the reference layout."""
-    deltas = {(FAMILIA_CAP, date(2023, 1, 1)): Decimal("-0.0758")}
+    deltas = {(FAMILIA_CAP, date(2023, 1, 1), None): Decimal("-0.0758")}
     grupos, descartadas = montar_grupos(
         [
             _item("CAP", FAMILIA_CAP, "60112", date(2023, 1, 1), "100.00"),
@@ -221,7 +221,7 @@ async def test_codigos_diferentes_do_mesmo_produto_somam_no_mes():
 
 async def test_fatores_diferentes_nao_sao_misturados():
     """Blending different fatores would corrupt column F."""
-    deltas = {(FAMILIA_CAP, date(2023, 1, 1)): Decimal("-0.0758")}
+    deltas = {(FAMILIA_CAP, date(2023, 1, 1), None): Decimal("-0.0758")}
     grupos, _ = montar_grupos(
         [
             _item("CAP", FAMILIA_CAP, "60112", date(2023, 1, 1), "100.00", "-0.1839"),
@@ -235,11 +235,36 @@ async def test_fatores_diferentes_nao_sao_misturados():
 
 async def test_mesma_medicao_em_dois_arquivos_nao_dobra_o_total():
     """A PDF re-uploaded under another name must not double the value."""
-    deltas = {(FAMILIA_CAP, date(2023, 1, 1)): Decimal("-0.0758")}
+    deltas = {(FAMILIA_CAP, date(2023, 1, 1), None): Decimal("-0.0758")}
     item = _item("CAP", FAMILIA_CAP, "60112", date(2023, 1, 1), "100.00")
     grupos, descartadas = montar_grupos([item, dict(item)], deltas)
     assert descartadas == 1
     assert [l.valor_pi for l in grupos[0].linhas] == [Decimal("100.00")]
+
+
+async def test_regiao_manual_vira_linha_separada():
+    mes = date(2023, 1, 1)
+    deltas = {(FAMILIA_CAP, mes, "Nordeste"): Decimal("-0.07"),
+              (FAMILIA_CAP, mes, "Sul"): Decimal("-0.19")}
+    comum = {**_item("CAP", FAMILIA_CAP, "60112", mes, "100.00"), "regiao": "Nordeste"}
+    fixado = {**_item("CAP", FAMILIA_CAP, "92704", mes, "50.00"), "regiao": "Sul",
+              "regiao_manual": "Sul"}
+    grupos, _ = montar_grupos([comum, fixado], deltas)
+    linhas = grupos[0].linhas
+    assert [(l.valor_pi, l.delta_p, l.regiao_manual) for l in linhas] == [
+        (Decimal("100.00"), Decimal("-0.07"), None),
+        (Decimal("50.00"), Decimal("-0.19"), "Sul"),
+    ]
+
+
+async def test_registro_manual_nao_e_descartado_como_repeticao():
+    mes = date(2023, 1, 1)
+    deltas = {(FAMILIA_CAP, mes, None): Decimal("-0.07")}
+    do_pdf = {**_item("CAP", FAMILIA_CAP, "60112", mes, "100.00"), "id": 1, "origem": "pdf"}
+    manual = {**_item("CAP", FAMILIA_CAP, "60112", mes, "5.00"), "id": 2, "origem": "manual"}
+    grupos, descartadas = montar_grupos([do_pdf, manual], deltas)
+    assert descartadas == 0
+    assert [l.valor_pi for l in grupos[0].linhas] == [Decimal("105.00")]
 
 
 # --- exportar (ponta a ponta com o banco) ----------------------------------
@@ -482,3 +507,36 @@ def test_serializar_aplica_as_formulas_do_art_16():
         "simulacao": False, "lucro": Decimal("0.0511"),
     }
     assert dados["contrato"] == {"id": 7, "numero": "15 00716/2022"}
+
+
+def _fixar_regiao(regiao):
+    contrato = contratos_repo.buscar("15 00716/2022")
+    [item] = medicoes_repo.listar_itens(contrato["id"])
+    medicoes_repo.atualizar_item(contrato["id"], item["id"], {"regiao_cap": regiao})
+    return contrato
+
+
+async def test_regiao_do_item_prevalece_sobre_cadastro_e_simulacao():
+    await _contrato_com_medicoes()
+    _indices_para_fevereiro()
+    contrato = _fixar_regiao("Sul")  # cadastro: Nordeste
+    sul = Decimal("3.45") / Decimal("4.29019") - 1
+
+    for override in (None, {"CAP": "Nordeste"}):
+        calculo = reequilibrio_export.calcular(contrato, override)
+        [linha] = calculo.grupos[0].linhas
+        assert linha.regiao_manual == "Sul"
+        assert abs(linha.delta_p - sul) < Decimal("1e-20")
+    assert any("região própria" in a for a in calculo.avisos)
+    assert reequilibrio_export.serializar(calculo)["familias"][0]["produtos"][0][
+        "linhas"][0]["regiao_manual"] == "Sul"
+
+
+async def test_regiao_manual_sem_indice_aparece_em_faltando():
+    await _contrato_com_medicoes()
+    _indices_para_fevereiro()
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.1", regiao="Norte")])
+    contrato = _fixar_regiao("Norte")  # Norte não tem a semana-base de dez/2021
+    with pytest.raises(ExportacaoImpossivel) as erro:
+        reequilibrio_export.calcular(contrato)
+    assert any("Norte" in f for f in erro.value.faltando)
