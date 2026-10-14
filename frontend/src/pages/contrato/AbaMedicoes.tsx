@@ -1,17 +1,21 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useOutletContext } from 'react-router'
 import { chaves, type FiltrosMedicoes } from '../../api/chaves'
-import { listarMedicoes } from '../../api/contratos'
-import type { Contrato } from '../../api/tipos'
+import { excluirMedicao, listarMedicoes } from '../../api/contratos'
+import { aposMedicao } from '../../api/invalidar'
+import type { Contrato, ItemMedicao } from '../../api/tipos'
 import { Carregando } from '../../components/Carregando'
+import { ConfirmarDialogo } from '../../components/ConfirmarDialogo'
+import { Icone } from '../../components/Icone'
 import { MensagemErro } from '../../components/MensagemErro'
 import { SeletorMes } from '../../components/SeletorMes'
 import { dinheiro, fator, mesAno, negativo } from '../../lib/formato'
+import { DialogoMedicao } from './DialogoMedicao'
 
 type Situacao = '' | 'true' | 'false'
 
-// Os itens como o PDF os trouxe. Um código sem produto não é pendência: fica
+// Os itens como o PDF os trouxe, editáveis um a um. Um código sem produto não é pendência: fica
 // fora do cálculo, e o atalho leva ao catálogo para associá-lo se for material.
 export function AbaMedicoes() {
   const contrato = useOutletContext<Contrato>()
@@ -19,6 +23,16 @@ export function AbaMedicoes() {
   const [situacao, setSituacao] = useState<Situacao>('')
   const [q, setQ] = useState('')
   const [filtros, setFiltros] = useState<FiltrosMedicoes>({})
+  const [editando, setEditando] = useState<ItemMedicao | 'novo' | null>(null)
+  const [excluindo, setExcluindo] = useState<ItemMedicao | null>(null)
+  const qc = useQueryClient()
+  const excluir = useMutation({
+    mutationFn: (itemId: number) => excluirMedicao(contrato.id, itemId),
+    onSuccess: async () => {
+      setExcluindo(null)
+      await aposMedicao(qc, contrato.id)
+    },
+  })
 
   const itens = useQuery({
     queryKey: chaves.medicoes(contrato.id, filtros),
@@ -68,6 +82,9 @@ export function AbaMedicoes() {
           <input id="filtro-q" className="input" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <button type="submit" className="btn">Filtrar</button>
+        <button type="button" className="btn btn-primary" onClick={() => setEditando('novo')}>
+          <Icone nome="add" /> Incluir registro
+        </button>
         <span className="espaco" />
         {itens.data && <span className="contagem">{itens.data.length} {itens.data.length === 1 ? 'item' : 'itens'}</span>}
       </form>
@@ -89,7 +106,10 @@ export function AbaMedicoes() {
                   <th className="num">Fator</th>
                   <th className="num">Reajuste líquido</th>
                   <th>Produto</th>
+                  <th>Origem</th>
+                  <th>Região</th>
                   <th>Arquivo</th>
+                  <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,13 +131,46 @@ export function AbaMedicoes() {
                         </>
                       )}
                     </td>
+                    <td>{item.origem !== 'pdf' && <span className="badge">{item.origem}</span>}</td>
+                    <td>
+                      {item.regiao_cap && <span className="badge badge-regiao">CAP: {item.regiao_cap} *</span>}{' '}
+                      {item.regiao_emulsoes && <span className="badge badge-regiao">Emulsões: {item.regiao_emulsoes} *</span>}
+                    </td>
                     <td>{item.arquivo}</td>
+                    <td>
+                      <button type="button" className="btn btn-sm" onClick={() => setEditando(item)}>
+                        <Icone nome="edit" /> Editar
+                      </button>{' '}
+                      <button type="button" className="btn btn-sm" onClick={() => setExcluindo(item)}>
+                        <Icone nome="delete" /> Excluir
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </section>
+      )}
+
+      {editando && (
+        <DialogoMedicao
+          contratoId={contrato.id}
+          item={editando === 'novo' ? undefined : editando}
+          aoFechar={() => setEditando(null)}
+        />
+      )}
+      {excluindo && (
+        <ConfirmarDialogo
+          titulo="Excluir registro"
+          mensagem={`Excluir o registro ${excluindo.codigo} de ${mesAno(excluindo.mes)}? Ele sai do cálculo e não volta ao reprocessar o PDF.`}
+          rotuloConfirmar="Excluir registro"
+          perigoso
+          pendente={excluir.isPending}
+          erro={excluir.error}
+          aoConfirmar={() => excluir.mutate(excluindo.id)}
+          aoCancelar={() => setExcluindo(null)}
+        />
       )}
     </>
   )

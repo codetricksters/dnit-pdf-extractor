@@ -15,6 +15,17 @@ export function aposCadastro(qc: QueryClient, contratoId: number) {
   ])
 }
 
+// Registro de medição incluído, alterado ou excluído: muda a lista, as
+// contagens do contrato e o cálculo.
+export function aposMedicao(qc: QueryClient, contratoId: number) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: chaves.todasMedicoes }),
+    qc.invalidateQueries({ queryKey: chaves.contrato(contratoId) }),
+    qc.invalidateQueries({ queryKey: chaves.contratos }),
+    qc.invalidateQueries({ queryKey: chaves.calculos }),
+  ])
+}
+
 // Produto ou associação de código: muda o que entra em qualquer cálculo.
 export function aposCatalogo(qc: QueryClient) {
   return Promise.all([

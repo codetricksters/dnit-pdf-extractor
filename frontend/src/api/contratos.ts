@@ -1,6 +1,6 @@
 import type { FiltrosMedicoes, RegioesSimuladas } from './chaves'
 import { caminhoCom, pedir } from './client'
-import type { Calculo, Contrato, ContratoPatch, ContratoResumo, ItemMedicao } from './tipos'
+import type { Calculo, Contrato, ContratoPatch, ContratoResumo, ItemMedicao, MedicaoCorpo } from './tipos'
 
 const BASE = '/api/v1/contratos'
 
@@ -27,3 +27,12 @@ export const listarMedicoes = (id: number, filtros: FiltrosMedicoes) =>
   pedir<ItemMedicao[]>(`${BASE}/${id}/medicoes`, {
     params: { mes: filtros.mes, no_calculo: filtros.noCalculo, q: filtros.q },
   })
+
+export const incluirMedicao = (id: number, corpo: MedicaoCorpo) =>
+  pedir<ItemMedicao>(`${BASE}/${id}/medicoes`, { metodo: 'POST', json: corpo })
+
+export const alterarMedicao = (id: number, itemId: number, corpo: MedicaoCorpo) =>
+  pedir<ItemMedicao>(`${BASE}/${id}/medicoes/${itemId}`, { metodo: 'PATCH', json: corpo })
+
+export const excluirMedicao = (id: number, itemId: number) =>
+  pedir<void>(`${BASE}/${id}/medicoes/${itemId}`, { metodo: 'DELETE' })

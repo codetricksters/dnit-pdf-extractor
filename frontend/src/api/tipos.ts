@@ -63,6 +63,22 @@ export interface ItemMedicao {
   produto_id: number | null
   produto: string | null
   familia: Familia | null
+  origem: OrigemMedicao
+  regiao_cap: string | null
+  regiao_emulsoes: string | null
+}
+
+export type OrigemMedicao = 'pdf' | 'editado' | 'manual'
+
+// Corpo de POST (completo) e PATCH (só o que mudou). Decimal em texto, com ponto.
+export interface MedicaoCorpo {
+  mes?: string
+  codigo?: string
+  descricao_pdf?: string | null
+  valor_pi?: Decimal
+  fator?: Decimal
+  regiao_cap?: string | null
+  regiao_emulsoes?: string | null
 }
 
 export interface LinhaCalculo {
@@ -74,6 +90,7 @@ export interface LinhaCalculo {
   c: Decimal
   e: Decimal
   f: Decimal
+  regiao_manual: string | null
 }
 
 export interface ProdutoCalculo {

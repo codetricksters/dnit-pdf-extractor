@@ -164,3 +164,5 @@ details.lotes > summary { cursor: pointer; color: var(--text-secondary); }
   color: var(--text-secondary);
   font-weight: 400;
 }
+.data-table tr.linha-regiao-manual td { background: var(--row-regiao-manual); }
+.badge-regiao { background: var(--row-regiao-manual); }

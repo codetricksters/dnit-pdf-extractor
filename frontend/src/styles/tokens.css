@@ -65,6 +65,8 @@
   --row-height: 32px;
   --row-height-subtotal: 36px;
   --row-height-total: 40px;
+  /* Linha do cálculo com região ANP fixada no registro (mesma cor da planilha). */
+  --row-regiao-manual: #fff2cc;
 
   --font-body: 'Inter', system-ui, sans-serif;
   --font-data: 'JetBrains Mono', ui-monospace, monospace;
