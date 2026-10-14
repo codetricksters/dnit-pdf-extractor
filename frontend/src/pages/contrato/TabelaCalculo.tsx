@@ -20,6 +20,10 @@ export function TabelaCalculo({ calculo }: { calculo: Calculo }) {
     ['Diferença', 'e = c − b'],
     ['Diferença sem lucro', `f = e·(1 − ${lucro})`],
   ]
+  const notas = calculo.familias.flatMap((f) =>
+    [...new Set(f.produtos.flatMap((p) => p.linhas.map((l) => l.regiao_manual)).filter(Boolean))]
+      .map((r) => `* Região ANP definida no registro: ${f.rotulo} — ${r}`),
+  )
   return (
     <div className="table-scroll">
       <table className="data-table">
@@ -45,9 +49,12 @@ export function TabelaCalculo({ calculo }: { calculo: Calculo }) {
                   <tr className="linha-produto">
                     <td colSpan={8}>{produto.descricao}</td>
                   </tr>
-                  {produto.linhas.map((l) => (
-                    <tr key={l.mes}>
-                      <td>{mesAno(l.mes)}</td>
+                  {produto.linhas.map((l, i) => (
+                    <tr key={`${l.mes}-${i}`} className={l.regiao_manual ? 'linha-regiao-manual' : undefined}>
+                      <td>
+                        {mesAno(l.mes)}
+                        {l.regiao_manual && <> <span className="badge badge-regiao">{l.regiao_manual} *</span></>}
+                      </td>
                       <Num v={l.a} formatar={dinheiro} />
                       <Num v={l.fator} formatar={fator} />
                       <Num v={l.b} formatar={dinheiro} />
@@ -71,6 +78,7 @@ export function TabelaCalculo({ calculo }: { calculo: Calculo }) {
           </tr>
         </tbody>
       </table>
+      {notas.map((n) => <p key={n} className="contagem mt-md">{n}</p>)}
     </div>
   )
 }

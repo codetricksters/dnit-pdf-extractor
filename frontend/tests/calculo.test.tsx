@@ -21,7 +21,7 @@ function umCalculo(parcial: Partial<Calculo> = {}): Calculo {
             subtotal: '-38275.68',
             linhas: [
               { mes: '2023-02-01', a: '412300.00', fator: '0.1480', b: '61020.40', d: '0.049812',
-                c: '20537.4876', e: '-40482.9124', f: '-38275.68' },
+                c: '20537.4876', e: '-40482.9124', f: '-38275.68', regiao_manual: null },
             ],
           },
         ],
@@ -49,6 +49,18 @@ function preparar(resposta: (url: URL) => Response) {
 }
 
 describe('Aba Cálculo', () => {
+  it('marca a linha com região própria e explica na nota', async () => {
+    const base = umCalculo()
+    const comum = base.familias[0].produtos[0].linhas[0]
+    base.familias[0].produtos[0].linhas = [comum, { ...comum, regiao_manual: 'Sul' }]
+    preparar(() => HttpResponse.json(base))
+    renderApp('/contratos/1/calculo')
+    const marcada = (await screen.findByText('Sul *')).closest('tr')!
+    expect(marcada).toHaveClass('linha-regiao-manual')
+    expect(screen.getAllByText('fev/2023')).toHaveLength(2)
+    expect(screen.getByText(/Região ANP definida no registro: CAP — Sul/)).toBeInTheDocument()
+  })
+
   it('tabela espelha a planilha: letras, grupos, subtotal, total e negativos', async () => {
     preparar(() => HttpResponse.json(umCalculo()))
     renderApp('/contratos/1/calculo')
