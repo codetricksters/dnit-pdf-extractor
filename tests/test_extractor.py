@@ -229,6 +229,35 @@ def test_extract_repeated_header_rows_are_ignored():
     assert len(result["rows"]) == 3
 
 
+def test_extract_page_header_with_phantom_middle_column():
+    """Page 2 may emit a header with a phantom None column after 'Preço Unitário';
+    its rows must be mapped by that page's header, not by the first page's."""
+    page1 = [[
+        ["Serviço", "Descrição", "Unidade", "Preço\nUnitário", "Quantidade\nAcumulada",
+         "Valor a PI\nAcumulado", "Valor a PI\nLíquido", "Fator", "Reajustamento\nLíquido",
+         "Ajuste Contratual\nLíquido", None],
+        ["56988", "ITEM A", "T", "10,00", "2,00", "20,00", "20,00", "1,00", "0,10", "2,00", None],
+    ]]
+    page2 = [[
+        ["Serviço", "Descrição", "Unidade", "Preço\nUnitário", None, "Quantidade\nAcumulada",
+         "Valor a PI\nAcumulado", "Valor a PI\nLíquido", "Fator", "Reajustamento\nLíquido",
+         "Ajuste Contratual\nLíquido", None],
+        ["60112", "AQUISIÇÃO DE CAP 50/70", "T", None, "3.289,5400", "735,066", "2.418.028,98",
+         "9.549,53", "0,5731", "5.472,83", None, "0,00"],
+    ]]
+    mock_pdf = make_pdfplumber_mock([page1, page2])
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "shifted.pdf")
+    row = next(r for r in result["rows"] if r["Serviço"] == "60112")
+    assert row["Preço Unitário"] == pytest.approx(3289.54)
+    assert row["Quantidade Acumulada"] == pytest.approx(735.066)
+    assert row["Valor a PI Acumulado"] == pytest.approx(2418028.98)
+    assert row["Valor a PI Líquido"] == pytest.approx(9549.53)
+    assert row["Fator"] == pytest.approx(0.5731)
+    assert row["Reajustamento Líquido"] == pytest.approx(5472.83)
+    assert row["Ajuste Contratual Líquido"] == pytest.approx(0.0)
+
+
 # --- header extraction tests ---
 
 HEADER_TEXT = (

@@ -110,9 +110,18 @@ def _clean_cell(value) -> str:
 
 def _map_row(raw_row: list, header: list) -> dict:
     record: dict = {col: "" for col in EXPECTED_COLUMNS}
+    last_mapped_idx = max((i for i, c in enumerate(header) if c in record), default=0)
+    previous: str | None = None
     for i, col in enumerate(header):
-        if col in record and i < len(raw_row):
+        if i >= len(raw_row):
+            break
+        if col in record:
             record[col] = _clean_cell(raw_row[i])
+            previous = col
+        elif not col and previous and i < last_mapped_idx and not record[previous]:
+            # Phantom column in the middle of the header: the PDF spans the previous
+            # column over it, so its value may land here (e.g. "Preço Unitário").
+            record[previous] = _clean_cell(raw_row[i])
     # Some PDF pages emit a trailing phantom column in the header (None at the end),
     # shifting the real "Ajuste Contratual Líquido" value one position to the right.
     # If the last expected column is still empty, scan forward from the last known
@@ -198,6 +207,10 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> dict:
 
     with pdf:
         for page in pdf.pages:
+            # A page can lay its columns out differently from page 1 (e.g. a phantom
+            # None column right after "Preço Unitário"), so rows are mapped by the
+            # header of their own page; the document's first header is the fallback.
+            page_header: list | None = None
             if not _header_done:
                 page_text = page.extract_text() or ""
                 if not contrato:
@@ -239,8 +252,13 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> dict:
                         continue
 
                     if _is_header_row(raw_row):
-                        if header is None:
-                            header = _normalize_header(raw_row)
+                        candidate = _normalize_header(raw_row)
+                        # Section titles ("6,0 - DEMAIS SERVIÇOS …") also match
+                        # _is_header_row; only a row naming the key columns is a header.
+                        if {"Serviço", "Descrição"} <= set(candidate):
+                            page_header = candidate
+                            if header is None:
+                                header = candidate
                         continue
 
                     if _is_section_header(raw_row):
@@ -249,7 +267,7 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> dict:
                     if header is None:
                         continue
 
-                    row_dict = _map_row(raw_row, header)
+                    row_dict = _map_row(raw_row, page_header or header)
                     service_val = row_dict.get("Serviço", "")
                     desc_val = row_dict.get("Descrição", "")
 
