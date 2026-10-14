@@ -1,6 +1,9 @@
 """Itens extraídos de um contrato, com o produto do catálogo (ou nenhum)."""
 
-from app.services import catalogo, contratos_repo, medicoes_repo
+from datetime import date
+
+from app.services import catalogo, contratos_repo, indices_repo, medicoes_repo
+from tests.indices_factory import semana
 
 HEADER = {"Contrato": "15 00716/2022 - HWN ENGENHARIA LTDA", "Data Base": "01/01/2022"}
 FEV = "01/02/2023 - 28/02/2023"
@@ -72,3 +75,55 @@ async def test_mes_invalido_e_contrato_inexistente(client):
     resposta = await client.get("/api/v1/contratos/999/medicoes")
     assert resposta.status_code == 404
     assert resposta.json()["detail"] == "Contrato 999 não encontrado."
+
+
+NOVO = {"mes": "2023-02", "codigo": "60112", "descricao_pdf": "CAP manual",
+        "valor_pi": "100.00", "fator": "0.148"}
+
+
+async def test_incluir_alterar_e_excluir_um_registro(client):
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.45", regiao="Sul")])
+    contrato_id = _contrato()
+    base = f"/api/v1/contratos/{contrato_id}/medicoes"
+
+    criado = await client.post(base, json={**NOVO, "regiao_cap": "sul"})
+    assert criado.status_code == 201, criado.text
+    item = criado.json()
+    assert item["origem"] == "manual" and item["regiao_cap"] == "Sul"
+    assert item["valor_pi"] == "100.00" and item["produto"] == "Aquisição de CAP 50/70"
+
+    alterado = await client.patch(f"{base}/{item['id']}", json={"fator": "0.2"})
+    assert alterado.status_code == 200 and alterado.json()["fator"] == "0.2"
+
+    assert (await client.delete(f"{base}/{item['id']}")).status_code == 204
+    assert len(await _medicoes(client, contrato_id)) == 3
+
+
+async def test_regiao_invalida_e_422_com_texto(client):
+    contrato_id = _contrato()
+    resposta = await client.post(f"/api/v1/contratos/{contrato_id}/medicoes",
+                                 json={**NOVO, "regiao_cap": "Marte"})
+    assert resposta.status_code == 422
+    assert "regiao_cap" in resposta.json()["detail"]
+
+
+async def test_corpo_malformado_e_422_do_pydantic(client):
+    contrato_id = _contrato()
+    resposta = await client.post(f"/api/v1/contratos/{contrato_id}/medicoes",
+                                 json={**NOVO, "mes": "2023-13"})
+    assert resposta.status_code == 422 and isinstance(resposta.json()["detail"], list)
+
+
+async def test_contrato_ou_item_inexistente_e_404(client):
+    contrato_id = _contrato()
+    assert (await client.post("/api/v1/contratos/999/medicoes", json=NOVO)).status_code == 404
+    base = f"/api/v1/contratos/{contrato_id}/medicoes"
+    assert (await client.patch(f"{base}/999999", json={"fator": "1"})).status_code == 404
+    assert (await client.delete(f"{base}/999999")).status_code == 404
+
+
+async def test_lista_traz_origem_e_regioes(client):
+    contrato_id = _contrato()
+    [item, *_] = await _medicoes(client, contrato_id)
+    assert item["origem"] == "pdf"
+    assert item["regiao_cap"] is None and item["regiao_emulsoes"] is None

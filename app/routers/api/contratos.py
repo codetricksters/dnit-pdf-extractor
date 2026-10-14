@@ -3,12 +3,18 @@
 import asyncio
 from datetime import date
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from ...services import contratos_repo, medicoes_repo
-from .erros import ErroApi
-from .indices import MES
-from .schemas import Contrato, ContratoPatch, ContratoResumo, ItemMedicao
+from .erros import MES, ErroApi
+from .schemas import (
+    Contrato,
+    ContratoPatch,
+    ContratoResumo,
+    ItemMedicao,
+    MedicaoNova,
+    MedicaoPatch,
+)
 
 router = APIRouter(prefix="/contratos", tags=["contratos"])
 
@@ -61,3 +67,53 @@ async def medicoes(
     q: str | None = Query(None, description="Trecho do código ou da descrição"),
 ):
     return await asyncio.to_thread(_medicoes, contrato_id, mes, no_calculo, q)
+
+
+def _item(contrato_id: int, item_id: int) -> dict:
+    item = medicoes_repo.buscar_item(contrato_id, item_id)
+    if item is None:
+        raise ErroApi(404, f"Registro {item_id} não encontrado neste contrato.")
+    return item
+
+
+def _incluir(contrato_id: int, dados: dict) -> dict:
+    try:
+        item_id = medicoes_repo.incluir_item(contrato_id, dados)
+    except medicoes_repo.MedicaoInvalida as e:
+        raise ErroApi(422, str(e)) from e
+    if item_id is None:
+        raise ErroApi(404, f"Contrato {contrato_id} não encontrado.")
+    return _item(contrato_id, item_id)
+
+
+def _alterar(contrato_id: int, item_id: int, dados: dict) -> dict:
+    try:
+        existe = medicoes_repo.atualizar_item(contrato_id, item_id, dados)
+    except medicoes_repo.MedicaoInvalida as e:
+        raise ErroApi(422, str(e)) from e
+    if not existe:
+        raise ErroApi(404, f"Registro {item_id} não encontrado neste contrato.")
+    return _item(contrato_id, item_id)
+
+
+def _excluir(contrato_id: int, item_id: int) -> None:
+    if not medicoes_repo.excluir_item(contrato_id, item_id):
+        raise ErroApi(404, f"Registro {item_id} não encontrado neste contrato.")
+
+
+@router.post("/{contrato_id}/medicoes", response_model=ItemMedicao, status_code=201)
+async def incluir_medicao(contrato_id: int, novo: MedicaoNova):
+    return await asyncio.to_thread(_incluir, contrato_id, novo.model_dump())
+
+
+@router.patch("/{contrato_id}/medicoes/{item_id}", response_model=ItemMedicao)
+async def alterar_medicao(contrato_id: int, item_id: int, patch: MedicaoPatch):
+    return await asyncio.to_thread(
+        _alterar, contrato_id, item_id, patch.model_dump(exclude_unset=True)
+    )
+
+
+@router.delete("/{contrato_id}/medicoes/{item_id}", status_code=204)
+async def excluir_medicao(contrato_id: int, item_id: int):
+    await asyncio.to_thread(_excluir, contrato_id, item_id)
+    return Response(status_code=204)

@@ -10,6 +10,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from .erros import MES
+
 Familia = Literal["CAP", "EMULSOES"]
 
 CODIGO_SERVICO = r"^\d{4,}$"
@@ -108,6 +110,35 @@ class ItemMedicao(BaseModel):
     produto_id: int | None
     produto: str | None
     familia: Familia | None
+    origem: Literal["pdf", "editado", "manual"]
+    regiao_cap: str | None
+    regiao_emulsoes: str | None
+
+
+class MedicaoNova(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mes: Annotated[str, StringConstraints(pattern=MES)]
+    codigo: Annotated[str, StringConstraints(pattern=CODIGO_SERVICO)]
+    descricao_pdf: str | None = None
+    valor_pi: Decimal
+    fator: Decimal
+    regiao_cap: str | None = None
+    regiao_emulsoes: str | None = None
+
+
+class MedicaoPatch(BaseModel):
+    """Só os campos enviados são gravados (``exclude_unset``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mes: Annotated[str, StringConstraints(pattern=MES)] | None = None
+    codigo: Annotated[str, StringConstraints(pattern=CODIGO_SERVICO)] | None = None
+    descricao_pdf: str | None = None
+    valor_pi: Decimal | None = None
+    fator: Decimal | None = None
+    regiao_cap: str | None = None
+    regiao_emulsoes: str | None = None
 
 
 class CodigoAssociado(BaseModel):
@@ -220,6 +251,7 @@ class LinhaCalculo(BaseModel):
     c: Decimal
     e: Decimal
     f: Decimal
+    regiao_manual: str | None = None
 
 
 class ProdutoCalculo(BaseModel):
