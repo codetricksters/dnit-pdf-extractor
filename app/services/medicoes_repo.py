@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from ..db import acquire_sync
+from . import indices_repo
 from .catalogo import padrao_ilike
 from .contratos_repo import mes_da_medicao
 
@@ -216,3 +217,146 @@ def meses_do_contrato(contrato_id: int) -> list:
             (contrato_id,),
         )
         return [r["mes_medicao"] for r in cur.fetchall()]
+
+
+class MedicaoInvalida(ValueError):
+    """Registro de medição recusado, com mensagem para o usuário."""
+
+
+CAMPOS_ITEM = ("mes", "codigo", "descricao_pdf", "valor_pi", "fator",
+               "regiao_cap", "regiao_emulsoes")
+# A chave com que o reprocessamento reencontra um registro do PDF: mudá-la
+# faria o PDF reenviado criar um registro novo, duplicado.
+_CHAVE_PDF = ("mes", "codigo")
+_COLUNA = {"mes": "mes_medicao", "codigo": "codigo_servico"}
+_MES_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+
+
+def _validar(dados: dict, *, completo: bool) -> dict:
+    """Os campos de *dados* convertidos para as colunas, ou MedicaoInvalida.
+
+    Tudo é validado antes de qualquer escrita, e todos os problemas são
+    relatados de uma vez.
+    """
+    desconhecidos = sorted(set(dados) - set(CAMPOS_ITEM))
+    if desconhecidos:
+        raise MedicaoInvalida(f"Campo(s) não editável(is): {', '.join(desconhecidos)}.")
+    obrigatorios = ("mes", "codigo", "valor_pi", "fator") if completo else ()
+    erros = [f"{c}: obrigatório." for c in obrigatorios if dados.get(c) in (None, "")]
+    colunas: dict = {}
+    for campo, valor in dados.items():
+        if campo in obrigatorios and valor in (None, ""):
+            continue
+        if campo == "mes":
+            achado = _MES_RE.match(str(valor or ""))
+            if not achado:
+                erros.append("mes: mês inválido; use AAAA-MM.")
+                continue
+            colunas["mes_medicao"] = date(int(achado[1]), int(achado[2]), 1)
+        elif campo == "codigo":
+            codigo = str(valor or "").strip()
+            if not _CODIGO_RE.match(codigo):
+                erros.append("codigo: o código de serviço tem 4 ou mais dígitos.")
+                continue
+            colunas["codigo_servico"] = codigo
+        elif campo in ("valor_pi", "fator"):
+            numero = None if valor is None else _decimal(valor)
+            if numero is None or not numero.is_finite():
+                erros.append(f"{campo}: informe um número.")
+                continue
+            colunas[campo] = numero
+        elif campo == "descricao_pdf":
+            colunas[campo] = (str(valor).strip() or None) if valor is not None else None
+        else:  # regiao_cap / regiao_emulsoes
+            if valor in (None, ""):
+                colunas[campo] = None
+                continue
+            grafia = indices_repo.normalizar_regiao(str(valor))
+            if grafia is None:
+                erros.append(
+                    f"{campo}: região {valor!r} sem preços ANP do CAP 50/70; "
+                    "escolha uma das regiões importadas."
+                )
+                continue
+            colunas[campo] = grafia
+    if erros:
+        raise MedicaoInvalida("\n".join(erros))
+    return colunas
+
+
+def buscar_item(contrato_id: int, item_id: int) -> dict | None:
+    with acquire_sync() as conn:
+        cur = conn.execute(
+            _SELECT_ITEM + "WHERE m.contrato_id = %s AND m.id = %s AND NOT m.excluido",
+            (contrato_id, item_id),
+        )
+        linha = cur.fetchone()
+        return dict(linha) if linha else None
+
+
+def incluir_item(contrato_id: int, dados: dict) -> int | None:
+    """Inclui um registro manual; None quando o contrato não existe."""
+    colunas = _validar(dados, completo=True)
+    with acquire_sync() as conn:
+        if conn.execute("SELECT 1 FROM contrato WHERE id = %s", (contrato_id,)).fetchone() is None:
+            return None
+        cur = conn.execute(
+            "INSERT INTO medicao_item (contrato_id, codigo_servico, descricao_pdf, "
+            "  mes_medicao, valor_pi, fator, source_file, origem, regiao_cap, "
+            "  regiao_emulsoes, atualizado_em) "
+            "VALUES (%(contrato_id)s, %(codigo_servico)s, %(descricao_pdf)s, "
+            "  %(mes_medicao)s, %(valor_pi)s, %(fator)s, 'manual', 'manual', "
+            "  %(regiao_cap)s, %(regiao_emulsoes)s, now()) RETURNING id",
+            {"contrato_id": contrato_id, "descricao_pdf": None, "regiao_cap": None,
+             "regiao_emulsoes": None, **colunas},
+        )
+        return cur.fetchone()["id"]
+
+
+def atualizar_item(contrato_id: int, item_id: int, dados: dict) -> bool:
+    """Altera um registro; um registro do PDF passa a 'editado'.
+
+    Código e mês só mudam num registro manual (ver ``_CHAVE_PDF``).
+    """
+    colunas = _validar(dados, completo=False)
+    with acquire_sync() as conn:
+        atual = conn.execute(
+            "SELECT origem FROM medicao_item "
+            "WHERE contrato_id = %s AND id = %s AND NOT excluido",
+            (contrato_id, item_id),
+        ).fetchone()
+        if atual is None:
+            return False
+        if atual["origem"] != "manual" and any(_COLUNA[c] in colunas for c in _CHAVE_PDF):
+            raise MedicaoInvalida(
+                "O código e mês de um registro extraído do PDF não podem ser "
+                "alterados: exclua-o e inclua um registro manual."
+            )
+        if not colunas:
+            return True
+        atribuicoes = ", ".join(f"{c} = %({c})s" for c in colunas)
+        conn.execute(
+            f"UPDATE medicao_item SET {atribuicoes}, atualizado_em = now(), "
+            "  origem = CASE origem WHEN 'pdf' THEN 'editado' ELSE origem END "
+            "WHERE id = %(id)s",
+            {**colunas, "id": item_id},
+        )
+        return True
+
+
+def excluir_item(contrato_id: int, item_id: int) -> bool:
+    """Apaga um registro manual; um do PDF é só marcado, para não voltar."""
+    with acquire_sync() as conn:
+        cur = conn.execute(
+            "DELETE FROM medicao_item "
+            "WHERE contrato_id = %s AND id = %s AND origem = 'manual'",
+            (contrato_id, item_id),
+        )
+        if cur.rowcount:
+            return True
+        cur = conn.execute(
+            "UPDATE medicao_item SET excluido = true, atualizado_em = now() "
+            "WHERE contrato_id = %s AND id = %s AND NOT excluido",
+            (contrato_id, item_id),
+        )
+        return cur.rowcount > 0
