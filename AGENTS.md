@@ -1,0 +1,65 @@
+# AGENTS.md
+
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+
+## Project Overview
+
+`dnit-pdf-extractor` is a FastAPI web application for the DNIT "Resumo da Medição"
+workflow. Users upload one or more PDFs; the app extracts their tabular data
+(`pdfplumber`, or OCR for scanned files), persists the contract and the
+measurement items in PostgreSQL, and combines them with the price índices the
+users maintain (ANP weekly prices and IGP-DI) to compute the ΔP of art. 16.
+
+The deliverable is an **Excel "Reequilíbrio" spreadsheet** generated from a
+user-maintained template, with the calculation written as **live formulas** and
+the memória de cálculo preserved as a native equation, so every number can be
+audited. The interface is a **React SPA** in `frontend/`, built by Vite and
+served by FastAPI from `frontend/dist/` (`app/spa.py`); it shows the same
+calculation on screen and hosts the registration, índices, template and backup
+screens. The previous interface — Jinja templates and a Dash dashboard at
+`/dashboard` — is **frozen**: it stays in the repository and keeps working, but
+is off the menu and receives no new features.
+
+## Setup & Commands
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Python 3.12 is required (pinned in `.python-version`).
+
+```bash
+# Install dependencies (including dev)
+uv sync
+
+# Start PostgreSQL (required by the app and by the test suite, host port 5433)
+docker compose up -d postgres
+
+# Build the frontend (Node 24 required; output in frontend/dist, served by FastAPI)
+cd frontend && npm ci && npm run build
+
+# Run the dev server (migrations are applied at startup)
+uv run uvicorn main:app --reload --port 8000
+
+# One-off initial load of the price índices
+uv run python scripts/seed_indices.py
+
+# Run the backend tests
+uv run pytest -v
+
+# Run the frontend tests (from frontend/)
+npm run test    # Vitest; no backend, no database
+npm run e2e     # builds, then Playwright against a real FastAPI
+
+# Add a runtime dependency
+uv add <package>
+
+# Add a dev-only dependency
+uv add --dev <package>
+```
+
+Sample input PDFs go in `tmp/` (not committed to git).
+
+## Rules
+
+- [.Codex/rules/architecture.md](.Codex/rules/architecture.md) — app structure, data models, file layout
+- [.Codex/rules/backend.md](.Codex/rules/backend.md) — extraction, persistence, ΔP rules, Excel generation, templates and backup
+- [.Codex/rules/frontend.md](.Codex/rules/frontend.md) — templates, static assets, UI patterns
+- [.Codex/rules/deployment.md](.Codex/rules/deployment.md) — dependencies, environment variables, running in production
+- [.Codex/rules/documentation.md](.Codex/rules/documentation.md) — what the README must cover and when to update it
