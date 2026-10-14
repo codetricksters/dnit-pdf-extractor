@@ -23,6 +23,7 @@ from datetime import date
 from decimal import ROUND_DOWN, Decimal
 
 import openpyxl
+from openpyxl.styles import PatternFill
 
 from . import contratos_repo, indices_repo, medicoes_repo, xlsx_drawings
 from .catalogo import ROTULOS_FAMILIA
@@ -32,6 +33,7 @@ from .indices_repo import FonteBanco
 from .reequilibrio_layout import (
     ABA,
     CAMPOS_CABECALHO,
+    COR_REGIAO_MANUAL,
     COL_DELTA_P,
     COL_DESCRICAO,
     COL_FATOR,
@@ -50,6 +52,8 @@ from .reequilibrio_layout import (
     LINHA_TOTAL,
     LINHAS_MODELO,
     LUCRO,
+    MARCA_REGIAO_MANUAL,
+    NOTA_REGIAO_MANUAL,
     PRIMEIRA_LINHA,
     ROTULO_SUBTOTAL,
     ROTULO_TOTAL,
@@ -249,6 +253,8 @@ def _escrever_cabecalho(ws, contrato: dict) -> None:
 def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
     linha = PRIMEIRA_LINHA
     celulas_subtotal: list[str] = []
+    # Um dict, para manter a ordem e eliminar repetições.
+    notas: dict[tuple[str, str], None] = {}
 
     for grupo in grupos:
         linha_grupo = linha
@@ -263,7 +269,10 @@ def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
             ws.cell(linha, COL_MES).value = item.mes
             # The description points at the group header, so renaming the
             # product in the spreadsheet updates every row of the block.
-            ws.cell(linha, COL_DESCRICAO).value = f"=B{linha_grupo}"
+            descricao = f"=B{linha_grupo}"
+            if item.regiao_manual:
+                descricao += f'&"{MARCA_REGIAO_MANUAL}"'
+            ws.cell(linha, COL_DESCRICAO).value = descricao
             ws.cell(linha, COL_VALOR_PI).value = _numero(item.valor_pi)
             ws.cell(linha, COL_FATOR).value = _numero(item.fator)
             ws.cell(linha, COL_REAJUSTAMENTO).value = f"=TRUNC(E{linha}*D{linha},2)"
@@ -271,6 +280,10 @@ def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
             ws.cell(linha, COL_TOTAL_PRODUTOR).value = f"=D{linha}*G{linha}"
             ws.cell(linha, COL_REF_BRUTO).value = f"=H{linha}-F{linha}"
             ws.cell(linha, COL_REF_SEM_LUCRO).value = f"=I{linha}*(1-{LUCRO})"
+            if item.regiao_manual:
+                for col in range(COL_INICIO, COL_FIM + 1):
+                    ws.cell(linha, col).fill = PatternFill("solid", fgColor=COR_REGIAO_MANUAL)
+                notas.setdefault((grupo.familia, item.regiao_manual), None)
             linha += 1
 
         _aplicar(ws, linha, estilos[LINHA_SUBTOTAL])
@@ -288,6 +301,10 @@ def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
     ws.cell(linha, COL_REF_SEM_LUCRO).value = (
         "=" + "+".join(celulas_subtotal) if celulas_subtotal else 0
     )
+    for deslocamento, (familia, regiao) in enumerate(notas, start=2):
+        ws.cell(linha + deslocamento, COL_INICIO).value = NOTA_REGIAO_MANUAL.format(
+            familia=ROTULOS_FAMILIA.get(familia, familia), regiao=regiao
+        )
 
 
 def _acrescentar(faltando: list[str], mensagens: list[str], token: str, texto: str) -> None:

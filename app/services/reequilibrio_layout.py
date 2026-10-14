@@ -59,6 +59,12 @@ COL_TOTAL_PRODUTOR = 8
 COL_REF_BRUTO = 9
 COL_REF_SEM_LUCRO = 10
 
+# Linha calculada com a região fixada no registro de medição, e não com a do
+# contrato: '*' na descrição, fundo nesta cor e uma nota abaixo do total.
+MARCA_REGIAO_MANUAL = " *"
+COR_REGIAO_MANUAL = "FFF2CC"
+NOTA_REGIAO_MANUAL = "* Região ANP definida no registro: {familia} — {regiao}"
+
 CABECALHOS = {
     COL_MES: "MEDIÇÃO (MÊS)",
     COL_DESCRICAO: "DESCRIÇÃO",

@@ -21,7 +21,17 @@ from app.services.reequilibrio_export import (
     regioes_efetivas,
     serializar,
 )
-from app.services.reequilibrio_layout import ABA, PRIMEIRA_LINHA, ROTULO_SUBTOTAL, ROTULO_TOTAL
+from app.services.reequilibrio_layout import (
+    ABA,
+    COL_DESCRICAO,
+    COL_INICIO,
+    COL_MES,
+    COL_REAJUSTAMENTO,
+    COR_REGIAO_MANUAL,
+    PRIMEIRA_LINHA,
+    ROTULO_SUBTOTAL,
+    ROTULO_TOTAL,
+)
 
 from .indices_factory import mes_igp, semana
 
@@ -540,3 +550,30 @@ async def test_regiao_manual_sem_indice_aparece_em_faltando():
     with pytest.raises(ExportacaoImpossivel) as erro:
         reequilibrio_export.calcular(contrato)
     assert any("Norte" in f for f in erro.value.faltando)
+
+
+async def test_linha_com_regiao_manual_e_marcada_na_planilha(template):
+    grupos = [
+        Grupo("Aquisição de CAP 50/70", FAMILIA_CAP, [
+            Linha(date(2023, 2, 1), Decimal("100"), Decimal("-0.18"), Decimal("-0.07")),
+            Linha(date(2023, 2, 1), Decimal("50"), Decimal("-0.18"), Decimal("-0.19"), "Sul"),
+        ])
+    ]
+    contrato = {"numero": "15 00716/2022", "data_base": date(2022, 1, 1)}
+    ws = _aba(gerar_planilha(contrato, grupos, template))
+
+    comum, marcada = PRIMEIRA_LINHA + 1, PRIMEIRA_LINHA + 2
+    assert ws.cell(comum, COL_DESCRICAO).value == f"=B{PRIMEIRA_LINHA}"
+    assert ws.cell(marcada, COL_DESCRICAO).value == f'=B{PRIMEIRA_LINHA}&" *"'
+    assert ws.cell(marcada, COL_MES).fill.fgColor.rgb.endswith(COR_REGIAO_MANUAL)
+    assert not ws.cell(comum, COL_MES).fill.fgColor.rgb.endswith(COR_REGIAO_MANUAL)
+    assert ws.cell(marcada, COL_REAJUSTAMENTO).value == f"=TRUNC(E{marcada}*D{marcada},2)"
+
+    textos = [ws.cell(r, COL_INICIO).value for r in range(marcada, ws.max_row + 1)]
+    assert "* Região ANP definida no registro: Aquisição de CAP — Sul" in textos
+
+
+async def test_sem_regiao_manual_nao_ha_nota(template):
+    ws = _aba(gerar_planilha({"numero": "x", "data_base": date(2022, 1, 1)}, _grupos(), template))
+    textos = [str(ws.cell(r, COL_INICIO).value or "") for r in range(PRIMEIRA_LINHA, ws.max_row + 1)]
+    assert not any(t.startswith("*") for t in textos)
