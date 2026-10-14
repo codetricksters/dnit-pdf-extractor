@@ -1,11 +1,12 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useOutletContext } from 'react-router'
 import { chaves, type FiltrosMedicoes } from '../../api/chaves'
 import { listarMedicoes } from '../../api/contratos'
 import type { Contrato } from '../../api/tipos'
 import { Carregando } from '../../components/Carregando'
 import { MensagemErro } from '../../components/MensagemErro'
+import { SeletorMes } from '../../components/SeletorMes'
 import { dinheiro, fator, mesAno, negativo } from '../../lib/formato'
 
 type Situacao = '' | 'true' | 'false'
@@ -14,7 +15,7 @@ type Situacao = '' | 'true' | 'false'
 // fora do cálculo, e o atalho leva ao catálogo para associá-lo se for material.
 export function AbaMedicoes() {
   const contrato = useOutletContext<Contrato>()
-  const [mes, setMes] = useState('')
+  const [mes, setMes] = useState<string | null>('')
   const [situacao, setSituacao] = useState<Situacao>('')
   const [q, setQ] = useState('')
   const [filtros, setFiltros] = useState<FiltrosMedicoes>({})
@@ -25,8 +26,16 @@ export function AbaMedicoes() {
     placeholderData: keepPreviousData,
   })
 
+  // Os meses que o contrato tem: vêm da consulta sem filtros, que a tela já faz.
+  const todos = useQuery({ queryKey: chaves.medicoes(contrato.id, {}), queryFn: () => listarMedicoes(contrato.id, {}) })
+  const meses = useMemo(
+    () => [...new Set((todos.data ?? []).map((i) => i.mes.slice(0, 7)))].sort().reverse(),
+    [todos.data],
+  )
+
   function filtrar(e: FormEvent) {
     e.preventDefault()
+    if (mes === null) return
     setFiltros({
       mes: mes || undefined,
       noCalculo: situacao === '' ? undefined : situacao === 'true',
@@ -39,7 +48,7 @@ export function AbaMedicoes() {
       <form className="barra" onSubmit={filtrar}>
         <div className="field">
           <label className="field-label" htmlFor="filtro-mes">Mês</label>
-          <input id="filtro-mes" type="month" className="input" value={mes} onChange={(e) => setMes(e.target.value)} />
+          <SeletorMes id="filtro-mes" opcoes={meses} aoMudar={setMes} />
         </div>
         <div className="field">
           <label className="field-label" htmlFor="filtro-situacao">Situação</label>

@@ -60,7 +60,7 @@ describe('Aba Medições', () => {
     const { usuario } = renderApp('/contratos/1/medicoes')
     await screen.findByText('60112')
 
-    await usuario.type(screen.getByLabelText('Mês'), '2023-02')
+    await usuario.type(screen.getByLabelText('Mês'), 'fev/2023')
     await usuario.selectOptions(screen.getByLabelText('Situação'), 'Só no cálculo')
     await usuario.type(screen.getByLabelText('Código ou descrição'), 'cap')
     await usuario.click(screen.getByRole('button', { name: 'Filtrar' }))
@@ -69,6 +69,24 @@ describe('Aba Medições', () => {
     expect(ultimo.get('mes')).toBe('2023-02')
     expect(ultimo.get('no_calculo')).toBe('true')
     expect(ultimo.get('q')).toBe('cap')
+  })
+
+  it('mês digitado fora da lista é recusado no campo, sem consultar a API', async () => {
+    const pedidos = preparar([umItem()])
+    const { usuario } = renderApp('/contratos/1/medicoes')
+    await screen.findByText('60112')
+    const antes = pedidos.length
+
+    await usuario.type(screen.getByLabelText('Mês'), '2023-13')
+    expect(screen.getByText('Escolha um mês da lista, como fev/2023.')).toBeInTheDocument()
+    await usuario.click(screen.getByRole('button', { name: 'Filtrar' }))
+    expect(pedidos).toHaveLength(antes)
+
+    await usuario.clear(screen.getByLabelText('Mês'))
+    await usuario.type(screen.getByLabelText('Mês'), '02/2023')
+    expect(screen.queryByText(/Escolha um mês/)).not.toBeInTheDocument()
+    await usuario.click(screen.getByRole('button', { name: 'Filtrar' }))
+    expect(pedidos.at(-1)!.get('mes')).toBe('2023-02')
   })
 
   it('sem itens mostra o estado vazio', async () => {

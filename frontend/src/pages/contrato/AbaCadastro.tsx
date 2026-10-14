@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useOutletContext } from 'react-router'
 import { chaves } from '../../api/chaves'
 import { atualizarContrato } from '../../api/contratos'
@@ -8,6 +8,7 @@ import { ErroApi } from '../../api/erros'
 import { buscarCobertura } from '../../api/indices'
 import { aposCadastro } from '../../api/invalidar'
 import type { Contrato } from '../../api/tipos'
+import { CampoMesAno } from '../../components/CampoMesAno'
 import { MensagemErro } from '../../components/MensagemErro'
 import {
   CABECALHO, campoDoErro, montarPatch, PARAMETROS, pendenciasParametros, vaziosCabecalho,
@@ -23,7 +24,7 @@ export function AbaCadastro() {
   const qc = useQueryClient()
   const cobertura = useQuery({ queryKey: chaves.cobertura, queryFn: buscarCobertura })
   const form = useForm<ValoresCadastro>({ defaultValues: valoresIniciais(contrato) })
-  const { register, handleSubmit, reset, watch, setError, formState } = form
+  const { control, register, handleSubmit, reset, watch, setError, formState } = form
   const [erroGeral, setErroGeral] = useState<unknown>(null)
   const [salvo, setSalvo] = useState(false)
 
@@ -99,7 +100,19 @@ export function AbaCadastro() {
             <label className="field-label" htmlFor="data_base">
               Data Base <span className="field-required" aria-hidden="true" />
             </label>
-            <input id="data_base" type="month" className="input" {...register('data_base')} {...atributosDeErro('data_base')} />
+            <Controller
+              name="data_base"
+              control={control}
+              render={({ field }) => (
+                <CampoMesAno
+                  id="data_base"
+                  valor={field.value}
+                  aoMudar={field.onChange}
+                  invalido={!!formState.errors.data_base}
+                  descritoPor={formState.errors.data_base ? 'erro-data_base' : undefined}
+                />
+              )}
+            />
             <p className="field-hint">Sugerida pelo PDF; mês e ano.</p>
             {erroDo('data_base')}
           </div>

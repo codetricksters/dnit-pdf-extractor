@@ -5,7 +5,7 @@ import { exato } from '../../lib/formato'
 // O formulário do cadastro como strings; a API recebe só o que mudou.
 
 export interface ValoresCadastro {
-  data_base: string // AAAA-MM, do <input type="month">
+  data_base: string // AAAA-MM, de CampoMesAno ('' enquanto falta mês ou ano)
   regiao_CAP: string
   regiao_EMULSOES: string
   contratada: string

@@ -30,7 +30,8 @@ describe('Aba Cadastro', () => {
     expect(await screen.findByText('1 pendente — cálculo bloqueado')).toBeInTheDocument()
     expect(screen.getByText('2 vazios — sairá com aviso')).toBeInTheDocument()
     expect(screen.getByLabelText('Nº do processo')).toHaveAttribute('readonly')
-    expect(screen.getByLabelText('Data Base')).toHaveValue('2022-01')
+    expect(screen.getByLabelText('Data Base')).toHaveValue('01')
+    expect(screen.getByLabelText('Ano')).toHaveValue(2022)
     expect(screen.getByLabelText('Extensão (km)')).toHaveValue('45,7')
   })
 
@@ -45,6 +46,23 @@ describe('Aba Cadastro', () => {
     expect(await screen.findByText('Cadastro salvo.')).toBeInTheDocument()
     expect(screen.getByText('Parâmetros completos')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Salvar' })).toBeDisabled()
+  })
+
+  it('Data Base: mês e ano viram AAAA-MM, e meio preenchido não é enviado como data', async () => {
+    const recebidos = preparar(umContrato())
+    const { usuario } = renderApp('/contratos/1/cadastro')
+    const mes = await screen.findByLabelText('Data Base')
+    const ano = screen.getByLabelText('Ano')
+
+    await usuario.clear(ano)
+    await usuario.selectOptions(mes, 'março')
+    expect(mes).toHaveValue('03')
+    await usuario.type(ano, '2023')
+    await usuario.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(recebidos).toHaveLength(1))
+    expect(recebidos[0]).toEqual({ data_base: '2023-03' })
+    await waitFor(() => expect(screen.getByLabelText('Ano')).toHaveValue(2023))
+    expect(screen.getByLabelText('Data Base')).toHaveValue('03')
   })
 
   it('erro do backend aparece no campo', async () => {
