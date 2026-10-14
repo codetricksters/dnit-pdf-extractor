@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 
 from .db import (
@@ -81,6 +82,7 @@ app.include_router(admin.router)
 app.include_router(reequilibrio.router)
 app.include_router(api.router)
 app.add_exception_handler(api.ErroApi, api.tratar_erro_api)
+app.add_exception_handler(RequestValidationError, api.tratar_validacao)
 
 app.mount("/dashboard", create_dash_app())
 

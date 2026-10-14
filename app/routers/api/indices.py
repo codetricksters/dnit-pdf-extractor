@@ -14,7 +14,7 @@ from fastapi import APIRouter, Path, Query, Response, UploadFile
 from ...services import exportadores, importacao, indices_repo
 from ...services.delta_p import ANP_PRODUTO_CAP
 from ...services.importadores import ArquivoInvalido
-from .erros import ErroApi
+from .erros import MES, ErroApi
 from .schemas import (
     Cobertura,
     IndiceEntrada,
@@ -27,7 +27,6 @@ from .schemas import (
 router = APIRouter(prefix="/indices", tags=["índices"])
 
 LIMITE_UPLOAD = 20 * 1024 * 1024
-MES = r"^\d{4}-(0[1-9]|1[0-2])$"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 Mes = Annotated[str, Path(pattern=MES, description="Mês no formato AAAA-MM")]

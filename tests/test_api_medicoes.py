@@ -65,7 +65,10 @@ async def test_mes_invalido_e_contrato_inexistente(client):
     contrato_id = _contrato()
     resposta = await client.get(f"/api/v1/contratos/{contrato_id}/medicoes", params={"mes": "2023-13"})
     assert resposta.status_code == 422
-    assert isinstance(resposta.json()["detail"], list)
+    detalhe = resposta.json()["detail"]
+    assert isinstance(detalhe, list)
+    assert detalhe[0]["loc"] == ["query", "mes"]
+    assert detalhe[0]["msg"] == "Mês inválido. Use o formato AAAA-MM, com o mês de 01 a 12, por exemplo 2023-02."
     resposta = await client.get("/api/v1/contratos/999/medicoes")
     assert resposta.status_code == 404
     assert resposta.json()["detail"] == "Contrato 999 não encontrado."
