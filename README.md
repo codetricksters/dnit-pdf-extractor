@@ -232,6 +232,32 @@ estado sobreviver ao contêiner.
 A imagem constrói o frontend num estágio Node separado e leva só o
 `frontend/dist/`; Node não é dependência de execução.
 
+Num servidor Ubuntu, a alternativa é deixar só o PostgreSQL no Docker e rodar a
+aplicação direto no host, como serviço systemd:
+
+```bash
+./setup.sh      # uma vez: instala as dependências e prepara o projeto
+./prod.sh       # instala os serviços dnit-postgres e dnit-pdf-extractor
+./check-env.sh  # confere dependências, serviços e a resposta na porta 8000
+```
+
+Os dois serviços sobem no boot e o da aplicação reinicia se cair
+(`journalctl -u dnit-pdf-extractor -f` para o log). Rode os scripts como usuário
+comum, nunca com `sudo`: eles pedem a senha quando precisam. Depois de um
+`git pull`, rode `./prod.sh` de novo.
+
+Para acesso em rede com nome amigável:
+
+```bash
+./setup-network.sh   # configura DNS local e nginx; acessível em http://reequilibrio.local
+```
+
+O script instala dnsmasq (servidor DNS que resolve `reequilibrio.local` e
+`reequilibrio` para o IP do servidor) e nginx como proxy reverso na porta 80.
+Depois, configure o roteador ou os clientes para usarem este servidor como DNS
+(instruções no final do script), e qualquer dispositivo na rede poderá acessar
+pelo nome, sem software adicional — funciona como qualquer site da internet.
+
 Fora do Compose, `--workers 2` é seguro: a aplicação não guarda estado em
 memória e as tarefas periódicas são protegidas por *advisory locks* do
 PostgreSQL, então só um worker executa cada uma.
@@ -256,8 +282,14 @@ para o cliente correspondente ao servidor.
 
 ```
 main.py            Ponto de entrada (main:app)
-setup.sh           Preparação do ambiente de desenvolvimento (.env, Postgres,
-                   banco de testes, uv sync e seed dos índices)
+setup.sh           Prepara um servidor Ubuntu: instala Docker, uv, Node 24,
+                   Tesseract e cliente PG 16; .env, Postgres, banco de testes,
+                   uv sync, build do frontend e seed dos índices
+prod.sh            Produção sem contêiner da aplicação: Postgres no Docker e a
+                   aplicação como serviço systemd, ambos subindo no boot
+setup-network.sh   Configura acesso em rede: mDNS (reequilibrio.local) e nginx
+                   na porta 80 como proxy reverso para a aplicação
+check-env.sh       Verifica dependências, serviços e se a aplicação responde
 migrations/        Migrações SQL numeradas, aplicadas na subida
 scripts/           Carga inicial dos índices, preparação do banco do e2e,
                    geração das fixtures do teste ponta a ponta e reconstrução
