@@ -170,10 +170,11 @@ def itens_para_export(contrato_id: int) -> list[dict]:
             "JOIN produto_codigo pc ON pc.codigo_servico = m.codigo_servico "
             "JOIN produto p ON p.id = pc.produto_id "
             "WHERE m.contrato_id = %s AND NOT m.excluido "
-            # m.id DESC last so that, when the same measurement arrives under two
-            # file names, the most recently stored row comes first and the export
-            # keeps that one.
-            "ORDER BY p.familia, p.ordem, p.descricao_export, m.mes_medicao, m.id DESC",
+            # When the same measurement arrives under two file names, the export
+            # keeps the first row: a user-edited one wins, else the most recently
+            # stored (m.id DESC).
+            "ORDER BY p.familia, p.ordem, p.descricao_export, m.mes_medicao, "
+            "  (m.origem = 'editado') DESC, m.id DESC",
             (contrato_id,),
         )
         return [dict(r) for r in cur.fetchall()]

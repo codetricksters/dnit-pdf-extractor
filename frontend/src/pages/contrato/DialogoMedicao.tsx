@@ -45,12 +45,12 @@ export function DialogoMedicao({ contratoId, item, aoFechar }: Props) {
       aoFechar()
     },
     onError: (erro) => {
-      if (!(erro instanceof ErroApi) || Object.keys(erro.campos).length || !erro.detail) {
-        return setErroGeral(erro)
-      }
+      if (!(erro instanceof ErroApi)) return setErroGeral(erro)
       setErroGeral(null)
-      for (const [campo, msg] of Object.entries(errosPorCampo(erro.detail))) {
-        if (campo === 'geral') setErroGeral(new ErroApi(erro.status, msg!))
+      // O 422 do Pydantic já vem por campo; o do backend, em linhas "campo: mensagem".
+      const porCampo = Object.keys(erro.campos).length ? erro.campos : errosPorCampo(erro.detail)
+      for (const [campo, msg] of Object.entries(porCampo)) {
+        if (campo === 'geral' || !(campo in valoresIniciais())) setErroGeral(new ErroApi(erro.status, msg!))
         else setError(campo as CampoMedicao, { type: 'servidor', message: msg })
       }
     },

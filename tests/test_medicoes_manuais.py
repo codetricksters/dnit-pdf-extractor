@@ -160,3 +160,17 @@ def test_excluir_manual_apaga_e_excluir_do_pdf_e_logico():
         restantes = conn.execute("SELECT origem, excluido FROM medicao_item").fetchall()
     assert [dict(r) for r in restantes] == [{"origem": "pdf", "excluido": True}]
     assert medicoes_repo.excluir_item(contrato_id, do_pdf["id"]) is False
+
+
+def test_exportacao_prefere_o_registro_editado_ao_duplicado_de_outro_arquivo():
+    from app.services import catalogo
+
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(contrato_id, [_linha(arquivo="a.pdf")])
+    medicoes_repo.gravar_itens(contrato_id, [_linha(arquivo="b.pdf")])
+    catalogo.registrar_codigo("60112", catalogo.novo_produto("CAP", "CAP"))
+    antigo = next(i for i in medicoes_repo.listar_itens(contrato_id) if i["arquivo"] == "a.pdf")
+    medicoes_repo.atualizar_item(contrato_id, antigo["id"], {"valor_pi": "7.00"})
+
+    primeiro = medicoes_repo.itens_para_export(contrato_id)[0]
+    assert primeiro["id"] == antigo["id"] and primeiro["origem"] == "editado"

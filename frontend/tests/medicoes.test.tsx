@@ -162,6 +162,23 @@ describe('Aba Medições', () => {
     expect(within(dialogo).getByLabelText('Fator')).toHaveAttribute('aria-invalid', 'true')
   })
 
+  it('mostra no campo o erro 422 do Pydantic', async () => {
+    prepararEdicao([umItem()])
+    servidor.use(
+      http.post('/api/v1/contratos/1/medicoes', () =>
+        HttpResponse.json(
+          { detail: [{ loc: ['body', 'valor_pi'], msg: 'Input should be a valid decimal', type: 'decimal_parsing' }] },
+          { status: 422 },
+        )),
+    )
+    const { usuario } = renderApp('/contratos/1/medicoes')
+    await usuario.click(await screen.findByRole('button', { name: /Incluir registro/ }))
+    const dialogo = screen.getByRole('dialog')
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar' }))
+    expect(await within(dialogo).findByText('Input should be a valid decimal')).toBeInTheDocument()
+    expect(within(dialogo).getByLabelText('Valor PI líquido')).toHaveAttribute('aria-invalid', 'true')
+  })
+
   it('exclui só depois de confirmar', async () => {
     prepararEdicao([umItem()])
     let excluiu = false
