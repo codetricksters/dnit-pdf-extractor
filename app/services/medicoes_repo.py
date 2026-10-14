@@ -36,12 +36,25 @@ def _decimal(valor) -> Decimal | None:
         return None
 
 
+_SELECT_ITEM = (
+    "SELECT m.id, m.mes_medicao AS mes, m.codigo_servico AS codigo, "
+    "       m.descricao_pdf, round(m.valor_pi, 2) AS valor_pi, m.fator, "
+    "       trunc(m.valor_pi * m.fator, 2) AS reajuste, "
+    "       m.source_file AS arquivo, m.origem, m.regiao_cap, m.regiao_emulsoes, "
+    "       p.id AS produto_id, p.descricao_export AS produto, p.familia "
+    "FROM medicao_item m "
+    "LEFT JOIN produto_codigo pc ON pc.codigo_servico = m.codigo_servico "
+    "LEFT JOIN produto p ON p.id = pc.produto_id "
+)
+
+
 def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) -> int:
     """Store the item rows of one extracted file; returns how many were stored.
 
     Idempotent: the ``UNIQUE (contrato_id, codigo_servico, mes_medicao,
     source_file)`` key means reprocessing the same PDF updates its rows instead
-    of duplicating them.
+    of duplicating them. Rows the user edited (``origem = 'editado'``) or deleted
+    (``excluido``) are left alone.
 
     Every item with a service code is stored, associated in the catalogue or
     not: associating a code later brings its past items into the calculation
@@ -129,9 +142,13 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
                     "  %(mes_medicao)s, %(valor_pi)s, %(fator)s, %(source_file)s, "
                     "  %(job_id)s) "
                     "ON CONFLICT (contrato_id, codigo_servico, mes_medicao, source_file) "
+                    "  WHERE origem <> 'manual' "
                     "DO UPDATE SET valor_pi = EXCLUDED.valor_pi, "
                     "  fator = EXCLUDED.fator, job_id = EXCLUDED.job_id, "
-                    "  descricao_pdf = EXCLUDED.descricao_pdf",
+                    "  descricao_pdf = EXCLUDED.descricao_pdf "
+                    # Trabalho manual vence o PDF: um registro editado ou excluído
+                    # pelo usuário não é sobrescrito nem volta ao reprocessar.
+                    "WHERE medicao_item.origem = 'pdf' AND NOT medicao_item.excluido",
                     registros,
                 )
 
@@ -145,13 +162,13 @@ def itens_para_export(contrato_id: int) -> list[dict]:
     """
     with acquire_sync() as conn:
         cur = conn.execute(
-            "SELECT m.mes_medicao, m.codigo_servico, m.valor_pi, m.fator, "
-            "       m.source_file, p.descricao_export, p.familia, p.ordem, "
-            "       p.id AS produto_id "
+            "SELECT m.id, m.mes_medicao, m.codigo_servico, m.valor_pi, m.fator, "
+            "       m.source_file, m.origem, m.regiao_cap, m.regiao_emulsoes, "
+            "       p.descricao_export, p.familia, p.ordem, p.id AS produto_id "
             "FROM medicao_item m "
             "JOIN produto_codigo pc ON pc.codigo_servico = m.codigo_servico "
             "JOIN produto p ON p.id = pc.produto_id "
-            "WHERE m.contrato_id = %s "
+            "WHERE m.contrato_id = %s AND NOT m.excluido "
             # m.id DESC last so that, when the same measurement arrives under two
             # file names, the most recently stored row comes first and the export
             # keeps that one.
@@ -176,15 +193,8 @@ def listar_itens(
     """
     with acquire_sync() as conn:
         cur = conn.execute(
-            "SELECT m.id, m.mes_medicao AS mes, m.codigo_servico AS codigo, "
-            "       m.descricao_pdf, round(m.valor_pi, 2) AS valor_pi, m.fator, "
-            "       trunc(m.valor_pi * m.fator, 2) AS reajuste, "
-            "       m.source_file AS arquivo, p.id AS produto_id, "
-            "       p.descricao_export AS produto, p.familia "
-            "FROM medicao_item m "
-            "LEFT JOIN produto_codigo pc ON pc.codigo_servico = m.codigo_servico "
-            "LEFT JOIN produto p ON p.id = pc.produto_id "
-            "WHERE m.contrato_id = %(contrato)s "
+            _SELECT_ITEM +
+            "WHERE m.contrato_id = %(contrato)s AND NOT m.excluido "
             "  AND (%(mes)s::date IS NULL OR m.mes_medicao = %(mes)s) "
             "  AND (%(no_calculo)s::boolean IS NULL "
             "       OR (p.id IS NOT NULL) = %(no_calculo)s) "
@@ -202,7 +212,7 @@ def meses_do_contrato(contrato_id: int) -> list:
     with acquire_sync() as conn:
         cur = conn.execute(
             "SELECT DISTINCT mes_medicao FROM medicao_item WHERE contrato_id = %s "
-            "ORDER BY mes_medicao",
+            "  AND NOT excluido ORDER BY mes_medicao",
             (contrato_id,),
         )
         return [r["mes_medicao"] for r in cur.fetchall()]

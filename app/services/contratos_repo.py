@@ -143,13 +143,13 @@ def listar(numero: str | None = None) -> list[dict]:
     """Contratos com o resumo da tela de lista; *numero* filtra por trecho."""
     sql = (
         "SELECT c.*, "
-        "  (SELECT COUNT(*) FROM medicao_item m WHERE m.contrato_id = c.id) AS itens, "
+        "  (SELECT COUNT(*) FROM medicao_item m WHERE m.contrato_id = c.id AND NOT m.excluido) AS itens, "
         "  (SELECT COUNT(DISTINCT m.mes_medicao) FROM medicao_item m "
-        "     WHERE m.contrato_id = c.id) AS medicoes, "
+        "     WHERE m.contrato_id = c.id AND NOT m.excluido) AS medicoes, "
         "  (SELECT MIN(m.mes_medicao) FROM medicao_item m "
-        "     WHERE m.contrato_id = c.id) AS primeiro_mes, "
+        "     WHERE m.contrato_id = c.id AND NOT m.excluido) AS primeiro_mes, "
         "  (SELECT MAX(m.mes_medicao) FROM medicao_item m "
-        "     WHERE m.contrato_id = c.id) AS ultimo_mes "
+        "     WHERE m.contrato_id = c.id AND NOT m.excluido) AS ultimo_mes "
         "FROM contrato c"
     )
     params: list = []
