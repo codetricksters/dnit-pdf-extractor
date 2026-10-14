@@ -136,3 +136,16 @@
   .sidebar-nav { flex-direction: row; flex-wrap: wrap; overflow: visible; }
   .main-content { margin-left: 0; }
 }
+
+.lotes-ativos {
+  margin: auto var(--space-sm) var(--space-sm);
+  width: auto;
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+}
+
+.lotes-ativos-detalhe {
+  display: block;
+  font-family: var(--font-data);
+  font-size: 11px;
+}

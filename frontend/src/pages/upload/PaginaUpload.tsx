@@ -1,8 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { chaves } from '../../api/chaves'
 import { aposUpload } from '../../api/invalidar'
-import { acompanharJob, enviarPdfs, listarJobs, tentarDeNovo } from '../../api/jobs'
+import { acompanharJob, enviarPdfs, tentarDeNovo, useLotesAtivos } from '../../api/jobs'
 import type { StatusJob } from '../../api/tipos'
 import { Cabecalho } from '../../components/Cabecalho'
 import { Icone } from '../../components/Icone'
@@ -20,7 +19,7 @@ export function PaginaUpload() {
   const [rodada, setRodada] = useState(0)
 
   // Um lote enviado em outra aba (ou antes de recarregar a página) continua aqui.
-  const ativos = useQuery({ queryKey: chaves.jobs('active'), queryFn: () => listarJobs('active') })
+  const ativos = useLotesAtivos()
   useEffect(() => {
     if (!jobId && ativos.data?.length) setJobId(ativos.data[0].job_id)
   }, [jobId, ativos.data])
@@ -42,6 +41,7 @@ export function PaginaUpload() {
       setStatus(null)
       setArquivos([])
       setJobId(job_id)
+      void qc.invalidateQueries({ queryKey: ['jobs'] })
     },
   })
   const repetir = useMutation({

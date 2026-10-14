@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query'
+import { chaves } from './chaves'
 import { caminhoCom, pedir } from './client'
 import type { ResumoJob, StatusJob } from './tipos'
 
@@ -12,6 +14,19 @@ export function enviarPdfs(arquivos: File[]) {
 export const buscarStatusJob = (id: string) => pedir<StatusJob>(`/jobs/${c(id)}/status`)
 
 export const listarJobs = (status: 'active' | 'completed') => pedir<ResumoJob[]>('/jobs', { params: { status } })
+
+// Lotes ainda em processamento. Sempre reconsulta ao montar (o cache pode ter sido
+// preenchido antes do envio) e segue consultando enquanto houver lote ativo, para
+// que qualquer tela mostre o andamento.
+export function useLotesAtivos() {
+  return useQuery({
+    queryKey: chaves.jobs('active'),
+    queryFn: () => listarJobs('active'),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: (q) => (q.state.data?.length ? 3000 : false),
+  })
+}
 
 export const tentarDeNovo = (id: string, arquivo: string) =>
   pedir<unknown>(`/jobs/${c(id)}/retry/${c(arquivo)}`, { metodo: 'POST' })

@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router'
+import { useLotesAtivos } from '../api/jobs'
 import { BannerConexao } from './BannerConexao'
 import { Icone } from './Icone'
 
@@ -38,6 +39,22 @@ export function itemAtivo(prefixos: string[], pathname: string): boolean {
   return prefixos.some((p) => (p === '/' ? pathname === '/' : pathname === p || pathname.startsWith(`${p}/`)))
 }
 
+function LotesEmAndamento() {
+  const { data } = useLotesAtivos()
+  if (!data?.length) return null
+  const total = data.reduce((n, l) => n + l.file_count, 0)
+  const prontos = data.reduce((n, l) => n + l.completed_count + l.failed_count, 0)
+  return (
+    <Link to="/upload" className="nav-item lotes-ativos">
+      <Icone nome="sync" />
+      <span>
+        {data.length === 1 ? '1 lote em processamento' : `${data.length} lotes em processamento`}
+        <small className="lotes-ativos-detalhe">{prontos} de {total} arquivos</small>
+      </span>
+    </Link>
+  )
+}
+
 export function Shell() {
   const { pathname } = useLocation()
   return (
@@ -71,6 +88,7 @@ export function Shell() {
             </div>
           ))}
         </nav>
+        <LotesEmAndamento />
       </aside>
       <main className="main-content">
         <BannerConexao />

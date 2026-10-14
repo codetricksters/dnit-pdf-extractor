@@ -139,6 +139,37 @@ describe('Upload de PDFs', () => {
     expect(screen.queryByRole('link', { name: 'Baixar todos os resultados (.zip)' })).not.toBeInTheDocument()
   })
 
+  it('volta ao lote enviado depois de sair da tela e retornar', async () => {
+    const ativos: ResumoJob[] = []
+    preparar({
+      ativos,
+      status: umStatus(false, { 'lento.pdf': { status: 'processing', error: null, contrato_id: null, itens: null } }),
+    })
+    servidor.use(
+      http.post('/upload', () => {
+        ativos.push(umResumo({ job_id: 'j1', completed: false }))
+        return HttpResponse.json({ job_id: 'j1' })
+      }),
+    )
+    const { usuario } = renderApp('/upload')
+    await usuario.upload(screen.getByLabelText('Arquivos PDF'), [pdf('lento.pdf')])
+    await usuario.click(screen.getByRole('button', { name: 'Enviar para processamento' }))
+    await screen.findByText('Processando')
+
+    await usuario.click(screen.getByRole('link', { name: /Catálogo de produtos/ }))
+    await usuario.click(screen.getByRole('link', { name: /Upload de PDFs/ }))
+    expect(await screen.findByText('lento.pdf', { selector: 'td' })).toBeInTheDocument()
+  })
+
+  it('avisa em qualquer tela que há lote em andamento, com atalho para o upload', async () => {
+    preparar({ ativos: [umResumo({ job_id: 'j1', completed: false, file_count: 3, completed_count: 1 })] })
+    servidor.use(http.get('/api/v1/catalogo/*', () => HttpResponse.json([])))
+    renderApp('/catalogo')
+    const aviso = await screen.findByRole('link', { name: /1 lote em processamento/ })
+    expect(aviso).toHaveAttribute('href', '/upload')
+    expect(within(aviso).getByText(/1 de 3 arquivos/)).toBeInTheDocument()
+  })
+
   it('só aceita PDF', async () => {
     preparar()
     const { usuario } = renderApp('/upload', { applyAccept: false })
