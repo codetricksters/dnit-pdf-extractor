@@ -5,9 +5,18 @@ import type { ResumoJob, StatusJob } from './tipos'
 
 const c = encodeURIComponent
 
-export function enviarPdfs(arquivos: File[]) {
+export interface OpcoesEnvio {
+  atualizar: boolean // regrava o que já está no banco, inclusive o corrigido à mão
+  limparRegioes: boolean // só com atualizar
+}
+
+export function enviarPdfs(arquivos: File[], opcoes?: OpcoesEnvio) {
   const form = new FormData()
   for (const a of arquivos) form.append('files', a)
+  if (opcoes?.atualizar) {
+    form.append('atualizar', 'true')
+    if (opcoes.limparRegioes) form.append('limpar_regioes', 'true')
+  }
   return pedir<{ job_id: string }>('/upload', { metodo: 'POST', form })
 }
 

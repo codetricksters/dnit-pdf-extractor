@@ -1,7 +1,7 @@
 import asyncio
 from typing import List
 
-from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 
 from ..models.job import FileStatus
 from ..services.file_processor import classify_file, process_ocr_pdf, process_text_pdf
@@ -18,14 +18,22 @@ router = APIRouter()
 
 
 @router.post("/upload", tags=["extraction"])
-async def upload(request: Request, files: List[UploadFile] = File(...)):
+async def upload(
+    request: Request,
+    files: List[UploadFile] = File(...),
+    atualizar: bool = Form(False),
+    limpar_regioes: bool = Form(False),
+):
+    """``atualizar`` regrava os registros destes arquivos que já estão no banco,
+    inclusive os corrigidos e excluídos à mão; ``limpar_regioes`` também remove
+    as regiões fixadas neles."""
     file_data: list[tuple[str, bytes]] = []
     for f in files:
         content = await f.read()
         file_data.append((f.filename or "unknown.pdf", content))
 
     filenames = [name for name, _ in file_data]
-    job_id = await create_job(filenames)
+    job_id = await create_job(filenames, atualizar=atualizar, limpar_regioes=limpar_regioes)
 
     for name, content in file_data:
         save_upload(job_id, name, content)

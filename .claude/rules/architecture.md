@@ -14,7 +14,8 @@ migrations/                    # Numbered SQL migrations, applied in order at st
 ├── 005_template.sql           # template (xlsx blobs)
 ├── 006_catalogo_indices.sql   # drops confirmado; origem/atualizado_em; btree_gist + no-overlap constraint
 ├── 007_file_results_contrato.sql  # file_results.contrato_id / itens (which contract a file fed)
-└── 008_medicao_manual.sql     # medicao_item: origem, exclusão lógica, região por registro
+├── 008_medicao_manual.sql     # medicao_item: origem, exclusão lógica, região por registro
+└── 009_job_atualizar.sql      # jobs.atualizar / limpar_regioes (reenvio que regrava o corrigido)
 scripts/
 ├── seed_indices.py            # Initial load through the importers (--anp, --igp-di)
 ├── preparar_e2e.py            # Resets dnit_test and loads tests/fixtures/ for the Playwright suite

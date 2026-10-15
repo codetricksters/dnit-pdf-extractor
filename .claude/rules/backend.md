@@ -115,7 +115,13 @@ query.
 the partial unique index `uq_medicao_item_pdf` (`contrato_id, codigo_servico,
 mes_medicao, source_file WHERE origem <> 'manual'`) plus `ON CONFLICT … DO UPDATE
 … WHERE origem = 'pdf' AND NOT excluido`: reprocessing the same PDF does not
-duplicate rows, and never overwrites or brings back what the user edited or deleted.
+duplicate rows, and never overwrites or brings back what the user edited or deleted
+— unless `atualizar=True`, the user's confirmed choice on upload: the `WHERE` is
+dropped and the row also gets `origem = 'pdf'`, `excluido = false`, keeping
+`regiao_cap`/`regiao_emulsoes` unless `limpar_regioes=True`. The match is the same
+key, so it only reaches rows of the **same filename**; manual records are outside
+the index and never touched, and rows absent from the new extraction stay as they
+are.
 `itens_para_export` returns the rows joined to the catalogue — only associated
 codes. `gravar_itens` returns the number of items stored.
 
@@ -337,6 +343,11 @@ contract (`contratos_repo.registrar_do_pdf`) and the items
 (`medicoes_repo.gravar_itens`), and records on the file which contract it fed and
 how many items it stored (`job_manager.vincular_contrato`, migration 007). `GET /`
 is no longer here: the SPA serves it.
+
+The form fields `atualizar` and `limpar_regioes` ("Atualizar registros já
+importados" on the screen) are stored on the job (migration 009), and
+`_persistir` reads them back with `job_manager.opcoes_de_gravacao` instead of
+receiving them, so retrying a failed file writes the same way the upload did.
 
 ### jobs.py
 

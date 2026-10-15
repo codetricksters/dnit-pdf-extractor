@@ -49,13 +49,23 @@ _SELECT_ITEM = (
 )
 
 
-def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) -> int:
+def gravar_itens(
+    contrato_id: int,
+    rows: list[dict],
+    job_id: str | None = None,
+    *,
+    atualizar: bool = False,
+    limpar_regioes: bool = False,
+) -> int:
     """Store the item rows of one extracted file; returns how many were stored.
 
     Idempotent: the ``UNIQUE (contrato_id, codigo_servico, mes_medicao,
     source_file)`` key means reprocessing the same PDF updates its rows instead
     of duplicating them. Rows the user edited (``origem = 'editado'``) or deleted
-    (``excluido``) are left alone.
+    (``excluido``) are left alone — unless ``atualizar``, the user's explicit
+    "Atualizar registros já importados": then those rows take the PDF's values
+    again and come back as ``'pdf'``, keeping a pinned region unless
+    ``limpar_regioes``. Manual records have no source file and are never touched.
 
     Every item with a service code is stored, associated in the catalogue or
     not: associating a code later brings its past items into the calculation
@@ -133,6 +143,18 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
             }
         )
 
+    if atualizar:
+        # O usuário pediu e confirmou: o PDF vence o trabalho manual.
+        restaurar = ", origem = 'pdf', excluido = false, atualizado_em = now()"
+        if limpar_regioes:
+            restaurar += ", regiao_cap = NULL, regiao_emulsoes = NULL"
+        condicao = ""
+    else:
+        # Trabalho manual vence o PDF: um registro editado ou excluído pelo
+        # usuário não é sobrescrito nem volta ao reprocessar.
+        restaurar = ""
+        condicao = " WHERE medicao_item.origem = 'pdf' AND NOT medicao_item.excluido"
+
     if registros:
         with acquire_sync() as conn:
             with conn.cursor() as cur:
@@ -146,10 +168,7 @@ def gravar_itens(contrato_id: int, rows: list[dict], job_id: str | None = None) 
                     "  WHERE origem <> 'manual' "
                     "DO UPDATE SET valor_pi = EXCLUDED.valor_pi, "
                     "  fator = EXCLUDED.fator, job_id = EXCLUDED.job_id, "
-                    "  descricao_pdf = EXCLUDED.descricao_pdf "
-                    # Trabalho manual vence o PDF: um registro editado ou excluído
-                    # pelo usuário não é sobrescrito nem volta ao reprocessar.
-                    "WHERE medicao_item.origem = 'pdf' AND NOT medicao_item.excluido",
+                    "  descricao_pdf = EXCLUDED.descricao_pdf" + restaurar + condicao,
                     registros,
                 )
 

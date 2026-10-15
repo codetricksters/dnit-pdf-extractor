@@ -19,7 +19,7 @@ cada arquivo mostra quantos itens gravou e leva direto ao contrato.
 
 **Persistência em PostgreSQL.** Contrato, itens de medição, catálogo de produtos
 e a série de índices ficam no banco. Reprocessar o mesmo PDF não duplica nada e
-não sobrescreve o que o usuário corrigiu à mão.
+não sobrescreve o que o usuário corrigiu à mão, a menos que ele peça.
 
 **Catálogo de produtos por código de serviço.** O código é a chave confiável — o
 OCR corrompe a descrição, nunca o código. O usuário cadastra os produtos que
@@ -82,7 +82,11 @@ cadastro e que a simulação, e aparece na tela e na planilha como uma linha
 própria, marcada com `*`, colorida e com uma nota. *Aplicar região* fixa a mesma
 região de uma vez em todos os registros de uma família num mês ou num período de
 meses, depois de mostrar quantos registros vão mudar. Quando o PDF é reenviado, o
-que foi editado ou incluído à mão é preservado e o que foi excluído não volta.
+que foi editado ou incluído à mão é preservado e o que foi excluído não volta — a
+menos que o envio marque *Atualizar registros já importados*: depois de uma
+confirmação, os registros daqueles arquivos voltam a ser os do PDF, desfazendo
+correções e exclusões, e, se também marcado, as regiões fixadas. Registros
+incluídos à mão nunca são tocados.
 
 **Templates e backup pela interface.** Quem roda em Docker não precisa de
 `docker cp` nem de terminal: enviar, baixar, ativar e excluir templates, e gerar,

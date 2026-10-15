@@ -35,7 +35,8 @@ def _persistir(result: dict, filename: str, job_id: str) -> None:
             )
             return
         itens = medicoes_repo.gravar_itens(
-            contrato_id, result.get("rows") or [], job_id=job_id
+            contrato_id, result.get("rows") or [], job_id=job_id,
+            **job_manager.opcoes_de_gravacao(job_id),
         )
         job_manager.vincular_contrato(job_id, filename, contrato_id, itens)
         logger.info("'%s': %d item(ns) gravado(s) no banco.", filename, itens)

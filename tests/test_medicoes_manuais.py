@@ -277,3 +277,54 @@ def test_listar_filtra_por_arquivo():
     medicoes_repo.incluir_item(contrato_id, _novo())
     assert [i["codigo"] for i in medicoes_repo.listar_itens(contrato_id, arquivo="b.pdf")] == ["60300"]
     assert [i["origem"] for i in medicoes_repo.listar_itens(contrato_id, arquivo="manual")] == ["manual"]
+
+
+def _pdf_corrigido_excluido_e_regiao():
+    """Três registros do mesmo PDF: um corrigido com região, um excluído, um intacto."""
+    _regioes()
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(contrato_id, [_linha("60112"), _linha("60300"), _linha("60400")])
+    ids = {i["codigo"]: i["id"] for i in medicoes_repo.listar_itens(contrato_id)}
+    medicoes_repo.atualizar_item(contrato_id, ids["60112"], {"valor_pi": "1.00", "regiao_cap": "Sul"})
+    medicoes_repo.excluir_item(contrato_id, ids["60300"])
+    manual = medicoes_repo.incluir_item(contrato_id, _novo(valor_pi="7.00"))
+    return contrato_id, manual
+
+
+def _estado(contrato_id):
+    with acquire_sync() as conn:
+        linhas = conn.execute(
+            "SELECT codigo_servico, valor_pi, origem, excluido, regiao_cap FROM medicao_item "
+            "WHERE contrato_id = %s ORDER BY origem = 'manual', codigo_servico", (contrato_id,)
+        ).fetchall()
+    return [(r["codigo_servico"], r["valor_pi"], r["origem"], r["excluido"], r["regiao_cap"])
+            for r in linhas]
+
+
+def test_atualizar_regrava_corrigidos_e_excluidos_mantendo_a_regiao():
+    contrato_id, _ = _pdf_corrigido_excluido_e_regiao()
+    linhas = [_linha("60112", valor=99.0), _linha("60300", valor=98.0), _linha("60400", valor=97.0)]
+
+    assert medicoes_repo.gravar_itens(contrato_id, linhas, atualizar=True) == 3
+
+    assert _estado(contrato_id) == [
+        ("60112", Decimal("99"), "pdf", False, "Sul"),
+        ("60300", Decimal("98"), "pdf", False, None),
+        ("60400", Decimal("97"), "pdf", False, None),
+        ("60112", Decimal("7.00"), "manual", False, None),
+    ]
+
+
+def test_atualizar_e_limpar_regioes():
+    contrato_id, _ = _pdf_corrigido_excluido_e_regiao()
+    medicoes_repo.gravar_itens(contrato_id, [_linha("60112", valor=99.0)],
+                               atualizar=True, limpar_regioes=True)
+    assert _estado(contrato_id)[0] == ("60112", Decimal("99"), "pdf", False, None)
+
+
+def test_sem_atualizar_o_reenvio_continua_preservando():
+    contrato_id, _ = _pdf_corrigido_excluido_e_regiao()
+    antes = _estado(contrato_id)
+    medicoes_repo.gravar_itens(contrato_id, [_linha("60112", valor=99.0), _linha("60300", valor=98.0)],
+                               limpar_regioes=True)
+    assert _estado(contrato_id) == antes

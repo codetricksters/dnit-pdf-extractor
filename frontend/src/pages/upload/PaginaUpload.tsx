@@ -4,6 +4,7 @@ import { aposUpload } from '../../api/invalidar'
 import { acompanharJob, enviarPdfs, tentarDeNovo, useLotesAtivos } from '../../api/jobs'
 import type { StatusJob } from '../../api/tipos'
 import { Cabecalho } from '../../components/Cabecalho'
+import { ConfirmarDialogo } from '../../components/ConfirmarDialogo'
 import { Icone } from '../../components/Icone'
 import { MensagemErro } from '../../components/MensagemErro'
 import { AreaArquivos } from './AreaArquivos'
@@ -17,6 +18,9 @@ export function PaginaUpload() {
   const [status, setStatus] = useState<StatusJob | null>(null)
   // Muda a cada retentativa, para reabrir o acompanhamento de um lote já concluído.
   const [rodada, setRodada] = useState(0)
+  const [atualizar, setAtualizar] = useState(false)
+  const [limparRegioes, setLimparRegioes] = useState(false)
+  const [confirmando, setConfirmando] = useState(false)
 
   // Um lote enviado em outra aba (ou antes de recarregar a página) continua aqui.
   const ativos = useLotesAtivos()
@@ -36,8 +40,9 @@ export function PaginaUpload() {
   }, [jobId, rodada, qc])
 
   const enviar = useMutation({
-    mutationFn: () => enviarPdfs(arquivos),
+    mutationFn: () => enviarPdfs(arquivos, { atualizar, limparRegioes }),
     onSuccess: ({ job_id }) => {
+      setConfirmando(false)
       setStatus(null)
       setArquivos([])
       setJobId(job_id)
@@ -54,9 +59,31 @@ export function PaginaUpload() {
     <>
       <Cabecalho
         titulo="Upload de PDFs"
-        subtitulo="Cada PDF grava o contrato e os itens da medição; reenviar o mesmo arquivo não duplica."
+        subtitulo="Cada PDF grava o contrato e os itens da medição; reenviar o mesmo arquivo não duplica nem desfaz as correções, a menos que se peça para atualizar."
       />
       <AreaArquivos arquivos={arquivos} aoEscolher={setArquivos} desabilitado={enviar.isPending} />
+      <div className="barra mt-md">
+        <label className="field-label">
+          <input
+            type="checkbox"
+            checked={atualizar}
+            onChange={(e) => {
+              setAtualizar(e.target.checked)
+              if (!e.target.checked) setLimparRegioes(false)
+            }}
+          />{' '}
+          Atualizar registros já importados
+        </label>
+        <label className="field-label">
+          <input
+            type="checkbox"
+            checked={limparRegioes}
+            disabled={!atualizar}
+            onChange={(e) => setLimparRegioes(e.target.checked)}
+          />{' '}
+          Remover também as regiões fixadas
+        </label>
+      </div>
       <div className="barra mt-md">
         <span className="contagem">O envio volta na hora; o andamento de cada arquivo aparece abaixo.</span>
         <span className="espaco" />
@@ -77,13 +104,25 @@ export function PaginaUpload() {
           type="button"
           className="btn btn-primary"
           disabled={arquivos.length === 0 || enviar.isPending || processando}
-          onClick={() => enviar.mutate()}
+          onClick={() => (atualizar ? setConfirmando(true) : enviar.mutate())}
         >
           <Icone nome="play_arrow" />
           <span>Enviar para processamento</span>
         </button>
       </div>
-      <MensagemErro erro={enviar.error ?? repetir.error} />
+      {confirmando && (
+        <ConfirmarDialogo
+          titulo="Atualizar registros já importados"
+          mensagem={`Os registros destes arquivos que já estão no banco serão regravados com os valores do PDF. Correções e exclusões feitas à mão serão perdidas${limparRegioes ? ', e as regiões fixadas também' : '; as regiões fixadas são mantidas'}. Registros incluídos manualmente não são afetados.`}
+          rotuloConfirmar="Atualizar registros"
+          perigoso
+          pendente={enviar.isPending}
+          erro={enviar.error}
+          aoConfirmar={() => enviar.mutate()}
+          aoCancelar={() => setConfirmando(false)}
+        />
+      )}
+      <MensagemErro erro={confirmando ? null : (enviar.error ?? repetir.error)} />
       {status && (
         <TabelaLote
           status={status}

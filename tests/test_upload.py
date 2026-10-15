@@ -160,3 +160,70 @@ async def test_download_json_has_header_and_rows(mock_extract, mock_classify, cl
     assert data["header"]["Contrato"] == "TEST-CONTRACT"
     assert len(data["rows"]) == 2
     assert data["rows"][0]["Serviço"] == "56988"
+
+
+# --- Atualizar registros já importados ---
+
+def _resultado(source: str) -> dict:
+    """make_result com um contrato reconhecível e o período, para gravar no banco."""
+    resultado = make_result(source)
+    resultado["header"]["Contrato"] = "15 00716/2022 - HWN ENGENHARIA LTDA"
+    for row in resultado["rows"]:
+        row["Período Líquido"] = resultado["header"]["Período Líquido"]
+    return resultado
+
+
+def _registros():
+    from app.db import acquire_sync
+
+    with acquire_sync() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT valor_pi, origem, excluido FROM medicao_item ORDER BY id"
+        ).fetchall()]
+
+
+def _sql(sql):
+    from app.db import acquire_sync
+
+    with acquire_sync() as conn:
+        conn.execute(sql)
+
+
+@patch("app.services.file_processor.is_image_pdf", return_value=False)
+@patch("app.services.file_processor.extract_from_pdf")
+async def test_upload_com_atualizar_regrava_o_que_foi_corrigido(mock_extract, mock_classify, client):
+    mock_extract.side_effect = lambda fb, sn: _resultado(sn)
+    arquivo = {"medicao.pdf": b"fakepdfbytes"}
+    await _wait_for_job(client, (await _post_files(client, arquivo)).json()["job_id"])
+    originais = _registros()
+    assert originais
+    _sql("UPDATE medicao_item SET valor_pi = 1, origem = 'editado'")
+
+    await _wait_for_job(client, (await _post_files(client, arquivo)).json()["job_id"])
+    assert {r["origem"] for r in _registros()} == {"editado"}
+
+    files = [("files", ("medicao.pdf", b"fakepdfbytes", "application/pdf"))]
+    resposta = await client.post("/upload", files=files, data={"atualizar": "true"})
+    await _wait_for_job(client, resposta.json()["job_id"])
+    assert _registros() == originais
+
+
+@patch("app.services.file_processor.is_image_pdf", return_value=False)
+@patch("app.services.file_processor.extract_from_pdf")
+async def test_tentar_de_novo_respeita_atualizar(mock_extract, mock_classify, client):
+    mock_extract.side_effect = lambda fb, sn: _resultado(sn)
+    files = [("files", ("medicao.pdf", b"fakepdfbytes", "application/pdf"))]
+    await _wait_for_job(client, (await client.post("/upload", files=files)).json()["job_id"])
+    originais = _registros()
+    assert originais
+    _sql("UPDATE medicao_item SET excluido = true")
+
+    mock_extract.side_effect = RuntimeError("falha passageira")
+    resposta = await client.post("/upload", files=files, data={"atualizar": "true"})
+    job_id = resposta.json()["job_id"]
+    await _wait_for_job(client, job_id)
+
+    mock_extract.side_effect = lambda fb, sn: _resultado(sn)
+    assert (await client.post(f"/jobs/{job_id}/retry/medicao.pdf")).status_code == 200
+    await _wait_for_job(client, job_id)
+    assert _registros() == originais

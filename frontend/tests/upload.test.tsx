@@ -33,6 +33,7 @@ function umResumo(parcial: Partial<ResumoJob> = {}): ResumoJob {
 
 function preparar({ ativos = [] as ResumoJob[], status = CONCLUIDO } = {}) {
   const enviados: string[] = []
+  const opcoes: Record<string, string | null>[] = []
   const retentativas: string[] = []
   servidor.use(
     http.get('/api/v1/contratos', () =>
@@ -44,6 +45,7 @@ function preparar({ ativos = [] as ResumoJob[], status = CONCLUIDO } = {}) {
     http.post('/upload', async ({ request }) => {
       const form = await request.formData()
       for (const f of form.getAll('files')) enviados.push((f as File).name)
+      opcoes.push({ atualizar: form.get('atualizar') as string | null, limpar_regioes: form.get('limpar_regioes') as string | null })
       return HttpResponse.json({ job_id: 'j1' })
     }),
     http.get('/jobs/:id/status', () => HttpResponse.json(status)),
@@ -52,7 +54,7 @@ function preparar({ ativos = [] as ResumoJob[], status = CONCLUIDO } = {}) {
       return HttpResponse.json({ ok: true })
     }),
   )
-  return { enviados, retentativas }
+  return { enviados, opcoes, retentativas }
 }
 
 const pdf = (nome: string) => new File(['%PDF-1.4'], nome, { type: 'application/pdf' })
@@ -185,5 +187,40 @@ describe('Upload de PDFs', () => {
     const linha = screen.getByText('20/09/2026 10:00').closest('tr')!
     expect(within(linha).getByText('3 de 3')).toBeInTheDocument()
     expect(within(linha).getByRole('button', { name: 'Baixar .zip' })).toBeInTheDocument()
+  })
+
+  it('sem Atualizar, envia direto e sem as opções', async () => {
+    const { opcoes } = preparar()
+    const { usuario } = renderApp('/upload')
+    await usuario.upload(screen.getByLabelText('Arquivos PDF'), [pdf('medicao_fev.pdf')])
+    expect(screen.getByLabelText('Remover também as regiões fixadas')).toBeDisabled()
+    await usuario.click(screen.getByRole('button', { name: 'Enviar para processamento' }))
+    await waitFor(() => expect(opcoes).toEqual([{ atualizar: null, limpar_regioes: null }]))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('com Atualizar, só envia depois de confirmar a perda das correções', async () => {
+    const { opcoes } = preparar()
+    const { usuario } = renderApp('/upload')
+    await usuario.upload(screen.getByLabelText('Arquivos PDF'), [pdf('medicao_fev.pdf')])
+    await usuario.click(screen.getByLabelText('Atualizar registros já importados'))
+    await usuario.click(screen.getByLabelText('Remover também as regiões fixadas'))
+    await usuario.click(screen.getByRole('button', { name: 'Enviar para processamento' }))
+
+    const dialogo = screen.getByRole('dialog')
+    expect(within(dialogo).getByText(/Correções e exclusões feitas à mão serão perdidas, e as regiões fixadas também/)).toBeInTheDocument()
+    expect(opcoes).toEqual([])
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Atualizar registros' }))
+    await waitFor(() => expect(opcoes).toEqual([{ atualizar: 'true', limpar_regioes: 'true' }]))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('desmarcar Atualizar desmarca também remover as regiões', async () => {
+    preparar()
+    const { usuario } = renderApp('/upload')
+    await usuario.click(screen.getByLabelText('Atualizar registros já importados'))
+    await usuario.click(screen.getByLabelText('Remover também as regiões fixadas'))
+    await usuario.click(screen.getByLabelText('Atualizar registros já importados'))
+    expect(screen.getByLabelText('Remover também as regiões fixadas')).not.toBeChecked()
   })
 })

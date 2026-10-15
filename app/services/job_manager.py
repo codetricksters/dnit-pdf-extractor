@@ -35,13 +35,16 @@ async def close_db() -> None:
     return None
 
 
-async def create_job(filenames: list[str]) -> str:
+async def create_job(
+    filenames: list[str], *, atualizar: bool = False, limpar_regioes: bool = False
+) -> str:
     job_id = uuid.uuid4().hex[:12]
     now = _now()
     async with acquire() as conn:
         await conn.execute(
-            "INSERT INTO jobs (job_id, created_at, updated_at) VALUES (%s, %s, %s)",
-            (job_id, now, now),
+            "INSERT INTO jobs (job_id, created_at, updated_at, atualizar, limpar_regioes) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (job_id, now, now, atualizar, atualizar and limpar_regioes),
         )
         for fname in filenames:
             await conn.execute(
@@ -116,6 +119,19 @@ def vincular_contrato(job_id: str, filename: str, contrato_id: int, itens: int) 
             "WHERE job_id = %s AND filename = %s",
             (contrato_id, itens, job_id, filename),
         )
+
+
+def opcoes_de_gravacao(job_id: str) -> dict:
+    """``atualizar`` e ``limpar_regioes`` do lote, para ``gravar_itens``.
+
+    Lidas do banco, e não passadas adiante, para que tentar de novo um arquivo
+    grave com a mesma escolha do envio. Síncrona, como ``vincular_contrato``.
+    """
+    with acquire_sync() as conn:
+        linha = conn.execute(
+            "SELECT atualizar, limpar_regioes FROM jobs WHERE job_id = %s", (job_id,)
+        ).fetchone()
+    return dict(linha) if linha else {"atualizar": False, "limpar_regioes": False}
 
 
 async def mark_job_completed(job_id: str) -> None:
