@@ -65,8 +65,10 @@ server {
         proxy_connect_timeout 75s;
     }
 
-    # SSE (Server-Sent Events) para progresso de upload
-    location /jobs/ {
+    # SSE (Server-Sent Events) para progresso de upload. Sem a barra final:
+    # "location /jobs/" faz o nginx redirecionar GET /jobs para /jobs/ (301),
+    # rota que o FastAPI não tem — a lista de lotes anteriores dava 404.
+    location /jobs {
         proxy_pass http://127.0.0.1:${PORTA_APP};
         proxy_http_version 1.1;
         proxy_set_header Connection '';
