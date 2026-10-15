@@ -189,10 +189,13 @@ it per line, and `EXCLUDE USING gist (… daterange(vigencia_inicio, vigencia_fi
 `buscar_preco_anp(produto, regiao, mes)` resolves a month to the weekly row whose
 vigência contains **day 15** (`_dia_de_referencia`); `cobertura()` returns
 `{"anp": {de, ate, registros, manuais}, "igp_di": {…}, "regioes": [...]}`.
-`FonteBanco.preco_anp` applies one fallback, `REGIAO_FALLBACK`: when
-**Centro-Oeste** has no price for the month (no week, or a `NULL` price) it uses
-**Brasil**'s. Other regions never fall back, and `buscar_preco_anp` itself does
-not, so the ANP grid and `cobertura()` keep showing the real gaps. Each
+`FonteBanco.preco_anp` applies one fallback, to `REGIAO_REFERENCIA`: when **any
+region other than Brasil** has no price for the month (no week, a `NULL` price or
+a zero) it uses **Brasil**'s. Zero is never a price — at the base month it would
+divide by zero, elsewhere it would silently zero the ΔP — so Brasil itself with no
+price or a zero is `None` (índice indisponível) and falls back nowhere.
+`buscar_preco_anp` does not fall back, so the ANP grid and `cobertura()` keep
+showing the real gaps. Each
 substitution is recorded in `FonteBanco.substituicoes`.
 `produtos_anp()` lists the distinct ANP products in the database (the filter of
 the ANP grid). `FonteBanco` caches per instance — one export asks for the same
@@ -229,7 +232,7 @@ The emulsion blend exists because the ANP publishes no emulsion price. The CAP
 component inside `ΔP_emul` uses the **EMULSOES** family's region, so the two
 families can produce different `ΔP_cap` for the same month.
 
-The Centro-Oeste → Brasil price fallback (`indices_repo.FonteBanco`) is
+The Brasil price fallback (`indices_repo.FonteBanco`) is
 transparent to ΔP; `reequilibrio_export` turns every substitution into an
 `avisos` line ("Preço ANP de Centro-Oeste indisponível em 03/2024; usado o preço
 de Brasil.") and writes the same text as a note below the total in the file.

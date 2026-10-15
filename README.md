@@ -34,8 +34,10 @@ já foi extraído, sem reprocessar PDFs.
 aplicação a partir dos preços semanais da ANP e do IGP-DI, sempre contra a *Data
 Base* do contrato. Cada família (CAP e EMULSÕES) tem a sua região da ANP,
 cadastrada no contrato. O preço do mês é o da semana que contém o dia 15 do mês
-anterior; uma semana sem cotação, ou um índice ainda não cadastrado, **recusa** o
-cálculo com a lista do que falta — nunca vira zero.
+anterior. Quando a região não tem preço no mês (sem semana, preço vazio ou zero),
+usa-se o preço do Brasil, com um aviso na tela e uma nota na planilha; se nem o
+Brasil tem preço, ou falta um índice, o cálculo é **recusado** com a lista do que
+falta — nunca vira zero.
 
 **Índices globais, editáveis por qualquer usuário.** Os preços da ANP e o IGP-DI
 não pertencem a contrato nenhum. Aparecem em grades — semana × região para a

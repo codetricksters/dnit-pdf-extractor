@@ -22,9 +22,9 @@ from .delta_p import ANP_PRODUTO_CAP, BASE_IGP_DI, INDICE_IGP_DI, inicio_do_mes
 # unforeseen region is a row rather than a migration.
 REGIOES = ("Norte", "Nordeste", "Centro-Oeste", "Sul", "Sudeste", "Brasil")
 
-# Região sem preço no mês → região cujo preço o substitui. Só o Centro-Oeste: a
-# ANP publica pouco para ele, e o Brasil é a referência nacional.
-REGIAO_FALLBACK = {"Centro-Oeste": "Brasil"}
+# Região cujo preço substitui o de qualquer outra que não tenha preço no mês: o
+# Brasil é a referência nacional da ANP.
+REGIAO_REFERENCIA = "Brasil"
 
 ORIGEM_MANUAL = "manual"
 ORIGEM_SEED = "seed"
@@ -56,6 +56,10 @@ def _dia_de_referencia(mes: date) -> date:
     return inicio_do_mes(mes).replace(day=15)
 
 
+def _com_valor(preco: Decimal | None) -> Decimal | None:
+    return None if preco is None or preco == 0 else preco
+
+
 class FonteBanco:
     """``FonteIndices`` backed by PostgreSQL, with a per-instance cache.
 
@@ -73,14 +77,19 @@ class FonteBanco:
         self.substituicoes: dict[tuple[str, str, date], None] = {}
 
     def preco_anp(self, produto: str, regiao: str, mes: date) -> Decimal | None:
+        """O preço do mês; sem preço (semana ausente, nula ou zero), o do Brasil.
+
+        Zero nunca é preço: no mês-base dividiria por zero e, num mês comum,
+        zeraria o ΔP em silêncio. Por isso o Brasil sem preço, ou com zero, é
+        ``None`` — índice indisponível — e não cai para lugar nenhum.
+        """
         chave = (produto, regiao, inicio_do_mes(mes))
         if chave not in self._precos:
-            preco = buscar_preco_anp(produto, regiao, mes)
-            alternativa = REGIAO_FALLBACK.get(regiao)
-            if preco is None and alternativa:
-                preco = buscar_preco_anp(produto, alternativa, mes)
+            preco = _com_valor(buscar_preco_anp(produto, regiao, mes))
+            if preco is None and regiao.casefold() != REGIAO_REFERENCIA.casefold():
+                preco = _com_valor(buscar_preco_anp(produto, REGIAO_REFERENCIA, mes))
                 if preco is not None:
-                    self.substituicoes[(regiao, alternativa, chave[2])] = None
+                    self.substituicoes[(regiao, REGIAO_REFERENCIA, chave[2])] = None
             self._precos[chave] = preco
         return self._precos[chave]
 

@@ -115,10 +115,40 @@ async def test_centro_oeste_com_preco_proprio_nao_e_substituido():
     assert fonte.substituicoes == {}
 
 
-async def test_outra_regiao_sem_preco_nao_cai_para_o_brasil():
+async def test_qualquer_regiao_sem_preco_usa_o_preco_do_brasil():
     _semear_anp(regiao="Brasil")
     fonte = indices_repo.FonteBanco()
+    mes = date(2021, 12, 1)
+    assert fonte.preco_anp(ANP_PRODUTO_CAP, "Sul", mes) == Decimal("4.02073")
+    assert list(fonte.substituicoes) == [("Sul", "Brasil", mes)]
+
+
+async def test_preco_zero_usa_o_preco_do_brasil():
+    indices_repo.gravar_precos_anp(
+        [
+            semana(date(2021, 12, 13), "0", regiao="Sudeste"),
+            semana(date(2021, 12, 13), "4.5", regiao="Brasil"),
+        ]
+    )
+    fonte = indices_repo.FonteBanco()
+    mes = date(2021, 12, 1)
+    assert fonte.preco_anp(ANP_PRODUTO_CAP, "Sudeste", mes) == Decimal("4.5")
+    assert list(fonte.substituicoes) == [("Sudeste", "Brasil", mes)]
+
+
+@pytest.mark.parametrize("preco", [None, "0"])
+async def test_brasil_sem_preco_ou_com_zero_fica_indisponivel(preco):
+    """Zero nunca é preço: na base dividiria por zero, no mês zeraria o ΔP."""
+    indices_repo.gravar_precos_anp(
+        [
+            semana(date(2021, 12, 13), preco, regiao="Brasil"),
+            semana(date(2021, 12, 13), "0", regiao="Sul"),
+        ]
+    )
+    fonte = indices_repo.FonteBanco()
+    assert fonte.preco_anp(ANP_PRODUTO_CAP, "Brasil", date(2021, 12, 1)) is None
     assert fonte.preco_anp(ANP_PRODUTO_CAP, "Sul", date(2021, 12, 1)) is None
+    assert fonte.substituicoes == {}
 
 
 async def test_preco_ausente_na_fonte_fica_nulo():
