@@ -66,7 +66,9 @@
   --row-height-subtotal: 36px;
   --row-height-total: 40px;
   /* Linha do cálculo com região ANP fixada no registro (mesma cor da planilha). */
-  --row-regiao-manual: #ffa200;
+  --row-regiao-manual: #fff2cc;
+  /* O tema é escuro: sem texto escuro, o claro some sobre este fundo claro. */
+  --row-regiao-manual-texto: #1e293b;
 
   --font-body: 'Inter', system-ui, sans-serif;
   --font-data: 'JetBrains Mono', ui-monospace, monospace;
