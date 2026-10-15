@@ -175,6 +175,15 @@ or, directly:
 uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
 ```
 
+or as a systemd service with only PostgreSQL in Docker: `./setup.sh` then
+`./prod.sh`. `prod.sh` writes `dnit-postgres.service` (`docker compose up -d
+postgres`) and `dnit-pdf-extractor.service`, which waits for port 5433 and runs
+`.venv/bin/uvicorn` directly, so boot depends on neither uv nor a shell profile.
+On the host, `setup.sh` points `BACKUP_DIR` away from the container's `/app`
+and sets `PG_BIN=/usr/lib/postgresql/16/bin`. Both scripts refuse to run as
+root and give back to the user any project files a past `sudo` run left owned by
+root.
+
 Workers > 1 is safe: no shared in-memory state, and the periodic housekeeping in
 `_cleanup_loop` (stale-job cleanup and the scheduled backup) is guarded by
 PostgreSQL advisory locks, so only one worker performs each.
