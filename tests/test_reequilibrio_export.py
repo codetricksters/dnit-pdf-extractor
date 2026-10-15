@@ -577,3 +577,27 @@ async def test_sem_regiao_manual_nao_ha_nota(template):
     ws = _aba(gerar_planilha({"numero": "x", "data_base": date(2022, 1, 1)}, _grupos(), template))
     textos = [str(ws.cell(r, COL_INICIO).value or "") for r in range(PRIMEIRA_LINHA, ws.max_row + 1)]
     assert not any(t.startswith("*") for t in textos)
+
+
+async def test_centro_oeste_sem_preco_usa_brasil_e_avisa_na_planilha(template):
+    await _contrato_com_medicoes()
+    _indices_para_fevereiro()
+    # O CAP do contrato passa a ser Centro-Oeste, só com preços de Brasil.
+    for linha in indices_repo.listar_precos_anp(regiao="Nordeste"):
+        indices_repo.gravar_precos_anp([{**linha, "regiao": "Brasil"}])
+    # Uma semana fora dos meses do cálculo, para Centro-Oeste ser uma região válida.
+    indices_repo.gravar_precos_anp([semana(date(2020, 1, 6), "3.5", regiao="Centro-Oeste")])
+    contrato = contratos_repo.buscar("15 00716/2022")
+
+    calculo = reequilibrio_export.calcular(contrato, {"CAP": "Centro-Oeste"})
+    assert any(
+        a.startswith("Preço ANP de Centro-Oeste indisponível em") and a.endswith("usado o preço de Brasil.")
+        for a in calculo.avisos
+    )
+    for aviso in calculo.avisos:
+        aviso.encode("latin-1")
+
+    resultado = reequilibrio_export.gerar(calculo, template)
+    ws = _aba(resultado.conteudo)
+    textos = [str(ws.cell(r, COL_INICIO).value or "") for r in range(PRIMEIRA_LINHA, ws.max_row + 1)]
+    assert any(t.startswith("Preço ANP de Centro-Oeste indisponível") for t in textos)

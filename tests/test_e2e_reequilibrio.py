@@ -199,12 +199,17 @@ async def test_ponta_a_ponta(client):
     assert cadastro["regioes"] == {"CAP": "Nordeste", "EMULSOES": "Nordeste"}
 
     # --- recusas -------------------------------------------------------------
-    # Centro-Oeste não tem cotação de CAP até maio/2023: o cálculo é recusado.
-    sem_cotacao = await client.get(
+    # Centro-Oeste não tem cotação de CAP até maio/2023: o preço de Brasil o substitui,
+    # e o cálculo diz isso nos avisos.
+    centro_oeste = await client.get(
         f"/api/v1/contratos/{contrato_id}/calculo", params={"regiao_cap": "Centro-Oeste"}
     )
-    assert sem_cotacao.status_code == 422
-    assert sem_cotacao.json()["faltando"]
+    assert centro_oeste.status_code == 200
+    assert any(
+        a.startswith("Preço ANP de Centro-Oeste indisponível em")
+        and a.endswith("usado o preço de Brasil.")
+        for a in centro_oeste.json()["avisos"]
+    )
     inexistente = await client.get(
         f"/api/v1/contratos/{contrato_id}/calculo", params={"regiao_cap": "Atlântida"}
     )

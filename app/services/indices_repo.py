@@ -22,6 +22,10 @@ from .delta_p import ANP_PRODUTO_CAP, BASE_IGP_DI, INDICE_IGP_DI, inicio_do_mes
 # unforeseen region is a row rather than a migration.
 REGIOES = ("Norte", "Nordeste", "Centro-Oeste", "Sul", "Sudeste", "Brasil")
 
+# Região sem preço no mês → região cujo preço o substitui. Só o Centro-Oeste: a
+# ANP publica pouco para ele, e o Brasil é a referência nacional.
+REGIAO_FALLBACK = {"Centro-Oeste": "Brasil"}
+
 ORIGEM_MANUAL = "manual"
 ORIGEM_SEED = "seed"
 
@@ -64,11 +68,20 @@ class FonteBanco:
     def __init__(self) -> None:
         self._precos: dict[tuple[str, str, date], Decimal | None] = {}
         self._indices: dict[tuple[str, date], Decimal | None] = {}
+        # (região pedida, região usada, mês) de cada preço substituído, na ordem
+        # em que apareceram; o export transforma isso em aviso.
+        self.substituicoes: dict[tuple[str, str, date], None] = {}
 
     def preco_anp(self, produto: str, regiao: str, mes: date) -> Decimal | None:
         chave = (produto, regiao, inicio_do_mes(mes))
         if chave not in self._precos:
-            self._precos[chave] = buscar_preco_anp(produto, regiao, mes)
+            preco = buscar_preco_anp(produto, regiao, mes)
+            alternativa = REGIAO_FALLBACK.get(regiao)
+            if preco is None and alternativa:
+                preco = buscar_preco_anp(produto, alternativa, mes)
+                if preco is not None:
+                    self.substituicoes[(regiao, alternativa, chave[2])] = None
+            self._precos[chave] = preco
         return self._precos[chave]
 
     def indice_mensal(self, indice: str, mes: date) -> Decimal | None:

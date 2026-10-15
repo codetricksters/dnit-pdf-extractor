@@ -113,6 +113,8 @@ class Calculo:
     grupos: list[Grupo]
     descartadas: int
     avisos: list[str] = field(default_factory=list)
+    # Preços ANP substituídos pelos de outra região; também vão na planilha.
+    substituicoes: list[str] = field(default_factory=list)
 
 
 CENTAVO = Decimal("0.01")
@@ -183,7 +185,9 @@ def montar_grupos(itens: list[dict], deltas: dict[tuple[str, date, str | None], 
     return grupos, descartadas
 
 
-def gerar_planilha(contrato: dict, grupos: list[Grupo], template: bytes) -> bytes:
+def gerar_planilha(
+    contrato: dict, grupos: list[Grupo], template: bytes, notas: list[str] | None = None
+) -> bytes:
     """Write the contract header and the calculation table into *template*."""
     formas = xlsx_drawings.extrair_formas(template, ABA)
 
@@ -200,7 +204,7 @@ def gerar_planilha(contrato: dict, grupos: list[Grupo], template: bytes) -> byte
         ws.merged_cells.ranges.remove(faixa)
 
     _escrever_cabecalho(ws, contrato)
-    _escrever_tabela(ws, grupos, estilos)
+    _escrever_tabela(ws, grupos, estilos, notas or [])
 
     saida = io.BytesIO()
     wb.save(saida)
@@ -250,7 +254,9 @@ def _escrever_cabecalho(ws, contrato: dict) -> None:
         ws.cell(LINHA_CABECALHO_INICIO + deslocamento, COL_DESCRICAO).value = valor
 
 
-def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
+def _escrever_tabela(
+    ws, grupos: list[Grupo], estilos: dict[int, dict], notas_extra: list[str]
+) -> None:
     linha = PRIMEIRA_LINHA
     celulas_subtotal: list[str] = []
     # Um dict, para manter a ordem e eliminar repetições.
@@ -305,6 +311,8 @@ def _escrever_tabela(ws, grupos: list[Grupo], estilos: dict[int, dict]) -> None:
         ws.cell(linha + deslocamento, COL_INICIO).value = NOTA_REGIAO_MANUAL.format(
             familia=ROTULOS_FAMILIA.get(familia, familia), regiao=regiao
         )
+    for deslocamento, nota in enumerate(notas_extra, start=2 + len(notas)):
+        ws.cell(linha + deslocamento, COL_INICIO).value = nota
 
 
 def _acrescentar(faltando: list[str], mensagens: list[str], token: str, texto: str) -> None:
@@ -372,9 +380,23 @@ def _anotar_regioes(itens: list[dict], regioes: dict) -> None:
         item["regiao"] = manual or regioes.get(item["familia"])
 
 
+def _descrever_substituicoes(fonte: FonteBanco) -> list[str]:
+    """Uma frase por par de regiões, com os meses de preço que foram trocados."""
+    meses: dict[tuple[str, str], list[str]] = {}
+    for pedida, usada, mes in fonte.substituicoes:
+        texto = f"{mes:%m/%Y}"
+        if texto not in meses.setdefault((pedida, usada), []):
+            meses[(pedida, usada)].append(texto)
+    return [
+        f"Preço ANP de {pedida} indisponível em {', '.join(lista)}; "
+        f"usado o preço de {usada}."
+        for (pedida, usada), lista in meses.items()
+    ]
+
+
 def _deltas(
     contrato: dict, itens: list[dict], regioes: dict
-) -> tuple[dict, list[str], list[str]]:
+) -> tuple[dict, list[str], list[str], list[str]]:
     """ΔP por (família, mês, região), com todo problema — não só o primeiro.
 
     Cada chave só é examinada uma vez: a Data Base é a mesma para todo item
@@ -414,7 +436,7 @@ def _deltas(
             regiao=regiao, fonte=fonte,
         )
 
-    return deltas, faltando, mensagens
+    return deltas, faltando, mensagens, _descrever_substituicoes(fonte)
 
 
 def calcular_deltas(
@@ -427,7 +449,7 @@ def calcular_deltas(
     """
     regioes, _ = regioes_efetivas(contrato, regioes_override)
     _anotar_regioes(itens, regioes)
-    deltas, faltando, _ = _deltas(contrato, itens, regioes)
+    deltas, faltando, _, _ = _deltas(contrato, itens, regioes)
     return deltas, faltando
 
 
@@ -448,7 +470,7 @@ def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
         )
 
     _anotar_regioes(itens, regioes)
-    deltas, faltando, mensagens = _deltas(contrato, itens, regioes)
+    deltas, faltando, mensagens, substituicoes = _deltas(contrato, itens, regioes)
     if faltando:
         raise ExportacaoImpossivel(
             "Faltam dados para calcular o ΔP:\n- " + "\n- ".join(mensagens), faltando
@@ -456,7 +478,7 @@ def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
 
     grupos, descartadas = montar_grupos(itens, deltas)
 
-    avisos = []
+    avisos = list(substituicoes)
     for familia, regiao in simuladas.items():
         cadastrada = (contrato.get("regioes") or {}).get(familia) or "sem região"
         avisos.append(
@@ -479,12 +501,16 @@ def calcular(contrato: dict, regioes_override: dict | None = None) -> Calculo:
             "Campos do contrato ainda não cadastrados: " + ", ".join(faltam_cadastro)
         )
 
-    return Calculo(contrato, regioes, simuladas, grupos, descartadas, avisos)
+    return Calculo(
+        contrato, regioes, simuladas, grupos, descartadas, avisos, substituicoes
+    )
 
 
 def gerar(calculo: Calculo, template: bytes) -> Resultado:
     return Resultado(
-        conteudo=gerar_planilha(calculo.contrato, calculo.grupos, template),
+        conteudo=gerar_planilha(
+            calculo.contrato, calculo.grupos, template, calculo.substituicoes
+        ),
         grupos=len(calculo.grupos),
         linhas=sum(len(g.linhas) for g in calculo.grupos),
         descartadas=calculo.descartadas,

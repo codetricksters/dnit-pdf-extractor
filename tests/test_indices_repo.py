@@ -84,6 +84,43 @@ async def test_regiao_sem_cotacao_retorna_none():
     assert indices_repo.buscar_preco_anp(ANP_PRODUTO_CAP, "Sul", date(2021, 12, 1)) is None
 
 
+async def test_centro_oeste_sem_semana_usa_o_preco_do_brasil():
+    _semear_anp(regiao="Brasil")
+    fonte = indices_repo.FonteBanco()
+    mes = date(2021, 12, 1)
+    assert fonte.preco_anp(ANP_PRODUTO_CAP, "Centro-Oeste", mes) == Decimal("4.02073")
+    assert list(fonte.substituicoes) == [("Centro-Oeste", "Brasil", mes)]
+
+
+async def test_centro_oeste_com_preco_nulo_usa_o_preco_do_brasil():
+    indices_repo.gravar_precos_anp(
+        [
+            semana(date(2021, 12, 13), None, regiao="Centro-Oeste"),
+            semana(date(2021, 12, 13), "4.5", regiao="Brasil"),
+        ]
+    )
+    fonte = indices_repo.FonteBanco()
+    assert fonte.preco_anp(ANP_PRODUTO_CAP, "Centro-Oeste", date(2021, 12, 1)) == Decimal("4.5")
+
+
+async def test_centro_oeste_com_preco_proprio_nao_e_substituido():
+    indices_repo.gravar_precos_anp(
+        [
+            semana(date(2021, 12, 13), "4.1", regiao="Centro-Oeste"),
+            semana(date(2021, 12, 13), "4.5", regiao="Brasil"),
+        ]
+    )
+    fonte = indices_repo.FonteBanco()
+    assert fonte.preco_anp(ANP_PRODUTO_CAP, "Centro-Oeste", date(2021, 12, 1)) == Decimal("4.1")
+    assert fonte.substituicoes == {}
+
+
+async def test_outra_regiao_sem_preco_nao_cai_para_o_brasil():
+    _semear_anp(regiao="Brasil")
+    fonte = indices_repo.FonteBanco()
+    assert fonte.preco_anp(ANP_PRODUTO_CAP, "Sul", date(2021, 12, 1)) is None
+
+
 async def test_preco_ausente_na_fonte_fica_nulo():
     """'***' in the ANP source means no quotation that week, stored as NULL."""
     indices_repo.gravar_precos_anp(
