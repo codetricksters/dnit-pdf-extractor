@@ -186,12 +186,14 @@ def listar_itens(
     mes: date | None = None,
     no_calculo: bool | None = None,
     q: str | None = None,
+    arquivo: str | None = None,
 ) -> list[dict]:
     """Every extracted item of a contract, with its catalogue product or None.
 
     The read-only view of the measurements: unlike ``itens_para_export`` it keeps
     the codes without a product, which is how the user finds what to associate.
-    ``reajuste`` truncates like column F of the spreadsheet.
+    ``reajuste`` truncates like column F of the spreadsheet. ``arquivo`` is the
+    source file (``'manual'`` for the records the user created).
     """
     with acquire_sync() as conn:
         cur = conn.execute(
@@ -203,9 +205,10 @@ def listar_itens(
             "  AND (%(padrao)s::text IS NULL "
             "       OR m.codigo_servico ILIKE %(padrao)s "
             "       OR m.descricao_pdf ILIKE %(padrao)s) "
+            "  AND (%(arquivo)s::text IS NULL OR m.source_file = %(arquivo)s) "
             "ORDER BY m.mes_medicao, m.codigo_servico, m.id",
             {"contrato": contrato_id, "mes": mes, "no_calculo": no_calculo,
-             "padrao": padrao_ilike(q)},
+             "padrao": padrao_ilike(q), "arquivo": arquivo},
         )
         return [dict(r) for r in cur.fetchall()]
 
@@ -402,17 +405,23 @@ def atualizar_item(contrato_id: int, item_id: int, dados: dict) -> bool:
 
 def excluir_item(contrato_id: int, item_id: int) -> bool:
     """Apaga um registro manual; um do PDF é só marcado, para não voltar."""
+    return excluir_itens(contrato_id, [item_id]) > 0
+
+
+def excluir_itens(contrato_id: int, ids: list[int]) -> int:
+    """``excluir_item`` para vários registros, numa transação; devolve quantos.
+
+    Ids de outro contrato, inexistentes ou já excluídos não contam.
+    """
     with acquire_sync() as conn:
-        cur = conn.execute(
+        apagados = conn.execute(
             "DELETE FROM medicao_item "
-            "WHERE contrato_id = %s AND id = %s AND origem = 'manual'",
-            (contrato_id, item_id),
-        )
-        if cur.rowcount:
-            return True
-        cur = conn.execute(
+            "WHERE contrato_id = %s AND id = ANY(%s) AND origem = 'manual'",
+            (contrato_id, ids),
+        ).rowcount
+        marcados = conn.execute(
             "UPDATE medicao_item SET excluido = true, atualizado_em = now() "
-            "WHERE contrato_id = %s AND id = %s AND NOT excluido",
-            (contrato_id, item_id),
-        )
-        return cur.rowcount > 0
+            "WHERE contrato_id = %s AND id = ANY(%s) AND NOT excluido",
+            (contrato_id, ids),
+        ).rowcount
+        return apagados + marcados

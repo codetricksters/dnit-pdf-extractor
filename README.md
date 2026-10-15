@@ -75,7 +75,8 @@ preenchem o cabeçalho da planilha. A *Data Base* vem sugerida pelo PDF e pode s
 corrigida; a região da ANP de cada família é obrigatória para calcular.
 
 **Medições editáveis.** Na aba *Medições* é possível corrigir, incluir e excluir
-registros um a um. Em cada registro dá para fixar a região da ANP de CAP e/ou de
+registros um a um, ou excluir de uma vez os selecionados — filtrando pelo arquivo
+de origem, *Selecionar todos* marca tudo o que veio de um PDF. Em cada registro dá para fixar a região da ANP de CAP e/ou de
 Emulsões: ele passa a ser calculado por essa região, que vale mais que a do
 cadastro e que a simulação, e aparece na tela e na planilha como uma linha
 própria, marcada com `*`, colorida e com uma nota. *Aplicar região* fixa a mesma

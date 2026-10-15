@@ -149,3 +149,18 @@ async def test_aplicar_regiao_em_lote(client):
     assert malformada.status_code == 422 and isinstance(malformada.json()["detail"], list)
     ausente = await client.post("/api/v1/contratos/999/medicoes/regiao", json=corpo)
     assert ausente.status_code == 404
+
+
+async def test_filtro_de_arquivo_e_exclusao_em_massa(client):
+    contrato_id = _contrato()
+    base = f"/api/v1/contratos/{contrato_id}/medicoes"
+    do_primeiro = await _medicoes(client, contrato_id, arquivo="1ª MP.pdf")
+    assert {i["arquivo"] for i in do_primeiro} == {"1ª MP.pdf"} and len(do_primeiro) == 2
+
+    resposta = await client.post(f"{base}/excluir", json={"ids": [i["id"] for i in do_primeiro]})
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json() == {"excluidos": 2}
+    assert [i["arquivo"] for i in await _medicoes(client, contrato_id)] == ["2ª MP.pdf"]
+
+    assert (await client.post(f"{base}/excluir", json={"ids": []})).status_code == 422
+    assert (await client.post("/api/v1/contratos/999/medicoes/excluir", json={"ids": [1]})).status_code == 404

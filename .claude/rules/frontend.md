@@ -49,7 +49,7 @@ esperar o contrato carregar.
 A simulação de região da aba *Cálculo* (`?regiao_cap=`/`?regiao_emulsoes=`) e a
 seleção/busca do *Catálogo* (`?produto=`/`?q=`) ficam na **URL**: recarregar ou
 mandar o link reproduz a tela. Os demais filtros (busca da lista de contratos,
-filtros da aba *Medições*, filtros da grade ANP/IGP-DI) são estado local — não
+filtros da aba *Medições*, inclusive o de arquivo e a seleção para excluir, filtros da grade ANP/IGP-DI) são estado local — não
 compartilháveis por link.
 
 `GET /upload` é a tela e `POST /upload` é o envio: o `app/spa.py` só atende GET,
@@ -85,7 +85,7 @@ e o proxy do Vite desvia para `index.html` o GET que pede `text/html`.
   `MensagemErro` (o `detail` e a lista `erros`). O frontend só redige mensagens
   que o backend não tem (campo ilegível antes de enviar, arquivo que não é PDF).
 - **Ações destrutivas pedem confirmação** com `ConfirmarDialogo`: excluir
-  produto, registro de medição, apagar semana ou mês (ANP e IGP-DI, na grade ou
+  produto, registro de medição (um ou os selecionados), apagar semana ou mês (ANP e IGP-DI, na grade ou
   na célula), excluir template ou backup. Restaurar backup exige ainda digitar o nome
   (`textoExigido`).
 - **Sem emoji; sem CDN.** Ícones são Material Symbols Outlined da fonte

@@ -11,9 +11,11 @@ from .schemas import (
     Contrato,
     ContratoPatch,
     ContratoResumo,
+    ExclusaoEmMassa,
     ItemMedicao,
     MedicaoNova,
     MedicaoPatch,
+    MedicoesExcluidas,
     RegiaoAplicada,
     RegiaoEmLote,
 )
@@ -54,11 +56,18 @@ async def atualizar(contrato_id: int, patch: ContratoPatch):
     return await asyncio.to_thread(_detalhe, contrato_id)
 
 
-def _medicoes(contrato_id: int, mes: str | None, no_calculo: bool | None, q: str | None) -> list[dict]:
+def _existe(contrato_id: int) -> None:
     if contratos_repo.buscar_por_id(contrato_id) is None:
         raise ErroApi(404, f"Contrato {contrato_id} não encontrado.")
+
+
+def _medicoes(contrato_id: int, mes: str | None, no_calculo: bool | None, q: str | None,
+              arquivo: str | None) -> list[dict]:
+    _existe(contrato_id)
     mes_ref = date(int(mes[:4]), int(mes[5:7]), 1) if mes else None
-    return medicoes_repo.listar_itens(contrato_id, mes=mes_ref, no_calculo=no_calculo, q=q)
+    return medicoes_repo.listar_itens(
+        contrato_id, mes=mes_ref, no_calculo=no_calculo, q=q, arquivo=arquivo
+    )
 
 
 @router.get("/{contrato_id}/medicoes", response_model=list[ItemMedicao])
@@ -67,8 +76,9 @@ async def medicoes(
     mes: str | None = Query(None, pattern=MES, description="AAAA-MM"),
     no_calculo: bool | None = Query(None, description="Só itens com produto (true) ou sem (false)"),
     q: str | None = Query(None, description="Trecho do código ou da descrição"),
+    arquivo: str | None = Query(None, description="Arquivo de origem; 'manual' para os incluídos à mão"),
 ):
-    return await asyncio.to_thread(_medicoes, contrato_id, mes, no_calculo, q)
+    return await asyncio.to_thread(_medicoes, contrato_id, mes, no_calculo, q, arquivo)
 
 
 def _item(contrato_id: int, item_id: int) -> dict:
@@ -104,8 +114,7 @@ def _excluir(contrato_id: int, item_id: int) -> None:
 
 
 def _aplicar_regiao(contrato_id: int, dados: dict, simular: bool) -> dict:
-    if contratos_repo.buscar_por_id(contrato_id) is None:
-        raise ErroApi(404, f"Contrato {contrato_id} não encontrado.")
+    _existe(contrato_id)
     try:
         return {"alterados": medicoes_repo.aplicar_regiao(contrato_id, **dados, simular=simular)}
     except medicoes_repo.MedicaoInvalida as e:
@@ -119,6 +128,17 @@ async def aplicar_regiao(
     simular: bool = Query(False, description="Só conta os registros, sem gravar"),
 ):
     return await asyncio.to_thread(_aplicar_regiao, contrato_id, corpo.model_dump(), simular)
+
+
+def _excluir_varios(contrato_id: int, ids: list[int]) -> dict:
+    _existe(contrato_id)
+    return {"excluidos": medicoes_repo.excluir_itens(contrato_id, ids)}
+
+
+# POST, não DELETE: proxies e clientes costumam descartar o corpo de um DELETE.
+@router.post("/{contrato_id}/medicoes/excluir", response_model=MedicoesExcluidas)
+async def excluir_medicoes(contrato_id: int, corpo: ExclusaoEmMassa):
+    return await asyncio.to_thread(_excluir_varios, contrato_id, corpo.ids)
 
 
 @router.post("/{contrato_id}/medicoes", response_model=ItemMedicao, status_code=201)

@@ -119,10 +119,11 @@ duplicate rows, and never overwrites or brings back what the user edited or dele
 `itens_para_export` returns the rows joined to the catalogue — only associated
 codes. `gravar_itens` returns the number of items stored.
 
-`listar_itens(contrato_id, mes=None, no_calculo=None, q=None)` serves the
-*Medições* tab: every extracted item of the contract with its associated product
-(or none), `no_calculo` filtering on whether the code has one, `q` matching code
-or description with `ILIKE`.
+`listar_itens(contrato_id, mes=None, no_calculo=None, q=None, arquivo=None)`
+serves the *Medições* tab: every extracted item of the contract with its
+associated product (or none), `no_calculo` filtering on whether the code has one,
+`q` matching code or description with `ILIKE`, `arquivo` on the `source_file`
+(`'manual'` for the records the user created).
 
 Records can be edited one at a time. `medicao_item.origem` is `'pdf'` (extracted,
 still updated by reprocessing), `'editado'` (extracted, then changed by the user)
@@ -133,7 +134,8 @@ extracted record are locked**: they are the key with which reprocessing finds th
 row again, so changing them would duplicate it; to fix them, delete the record
 and add a manual one. Deleting is **logical** for an extracted record
 (`excluido = true`, so the PDF does not bring it back) and a real `DELETE` for a
-manual one. `regiao_cap`/`regiao_emulsoes` pin an ANP region on the record
+manual one; `excluir_itens(contrato_id, ids)` does the same for several records in
+one transaction, ignoring ids of another contract. `regiao_cap`/`regiao_emulsoes` pin an ANP region on the record
 (normalised against `cobertura()["regioes"]`; empty means follow the contract).
 `listar_itens` and `itens_para_export` ignore `excluido`.
 
@@ -364,14 +366,15 @@ or `erros`. Contracts are addressed by numeric `id`; `GET /contratos?numero=`
 finds one by number. Index uploads are capped at 20 MB (413). The `X-Avisos`
 header (`calculo.py`) is sanitised to latin-1, since HTTP headers only accept it.
 
-Endpoints that exist for the React interface: `GET /contratos/{id}/medicoes?mes=&no_calculo=&q=`
+Endpoints that exist for the React interface: `GET /contratos/{id}/medicoes?mes=&no_calculo=&q=&arquivo=`
 (404 for an unknown contract), `GET /codigos?produto_id=`,
 `PUT /produtos/{id}/codigos` with `{"codigos": [...]}` (404 for an unknown
 product), `GET /indices/anp/produtos`, `manuais` in each series of
 `GET /indices/cobertura`, `POST /contratos/{id}/medicoes` (201),
 `PATCH /contratos/{id}/medicoes/{item_id}` and `DELETE …/{item_id}` (204),
 `POST /contratos/{id}/medicoes/regiao?simular=` (`{familia, mes_de, mes_ate,
-regiao}` → `{"alterados": n}`) — 404
+regiao}` → `{"alterados": n}`), `POST /contratos/{id}/medicoes/excluir` (`{"ids":
+[...]}` → `{"excluidos": n}`; POST because proxies drop a DELETE body) — 404
 for an unknown contract or record, `MedicaoInvalida` becomes `ErroApi(422)` with a
 text `detail` of `campo: mensagem` lines — and `arquivo` in the cálculo JSON — the filename the
 spreadsheet download would get, so the screen can show it during a simulation.

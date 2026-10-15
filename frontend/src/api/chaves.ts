@@ -11,6 +11,7 @@ export interface FiltrosMedicoes {
   mes?: string
   noCalculo?: boolean
   q?: string
+  arquivo?: string // 'manual' = incluídos à mão
 }
 
 export interface FiltrosCodigos {

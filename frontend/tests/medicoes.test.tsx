@@ -228,6 +228,43 @@ describe('Aba Medições', () => {
     expect(await screen.findByText('mes_ate: o período termina antes de começar.')).toBeInTheDocument()
   })
 
+  it('filtra por arquivo, com os manuais numa opção própria', async () => {
+    const pedidos = preparar([
+      umItem(), umItem({ id: 2, arquivo: 'medicao_mar.pdf' }), umItem({ id: 3, arquivo: 'manual', origem: 'manual' }),
+    ])
+    const { usuario } = renderApp('/contratos/1/medicoes')
+    await screen.findAllByText('60112')
+    const arquivo = screen.getByLabelText('Arquivo')
+    expect(within(arquivo).getAllByRole('option').map((o) => o.textContent)).toEqual(
+      ['Todos', 'Incluídos manualmente', 'medicao_fev.pdf', 'medicao_mar.pdf'],
+    )
+    await usuario.selectOptions(arquivo, 'medicao_mar.pdf')
+    await usuario.click(screen.getByRole('button', { name: 'Filtrar' }))
+    expect(pedidos.at(-1)!.get('arquivo')).toBe('medicao_mar.pdf')
+  })
+
+  it('seleciona todos os itens do filtro e exclui de uma vez, depois de confirmar', async () => {
+    prepararEdicao([umItem(), umItem({ id: 2, mes: '2023-03-01' }), umItem({ id: 3, mes: '2023-04-01' })])
+    const corpos: unknown[] = []
+    servidor.use(http.post('/api/v1/contratos/1/medicoes/excluir', async ({ request }) => {
+      corpos.push(await request.json())
+      return HttpResponse.json({ excluidos: 3 })
+    }))
+    const { usuario } = renderApp('/contratos/1/medicoes')
+    await screen.findAllByText('60112')
+    expect(screen.getByRole('button', { name: /Excluir selecionados/ })).toBeDisabled()
+
+    await usuario.click(screen.getByLabelText('Selecionar todos'))
+    await usuario.click(screen.getByLabelText('Selecionar 60112 de mar/2023'))
+    await usuario.click(screen.getByRole('button', { name: 'Excluir selecionados (2)' }))
+    expect(corpos).toEqual([])
+    const dialogo = screen.getByRole('dialog')
+    expect(within(dialogo).getByText(/Excluir 2 registros\?/)).toBeInTheDocument()
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Excluir registros' }))
+    await waitFor(() => expect(corpos).toEqual([{ ids: [1, 3] }]))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
   it('marca origem e região própria na lista', async () => {
     prepararEdicao([umItem({ origem: 'editado', regiao_cap: 'Sul' })])
     renderApp('/contratos/1/medicoes')

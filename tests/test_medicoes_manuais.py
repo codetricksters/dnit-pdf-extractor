@@ -247,3 +247,33 @@ def test_aplicar_regiao_recusa_parametro_invalido(args, trecho):
     with pytest.raises(MedicaoInvalida, match=trecho):
         medicoes_repo.aplicar_regiao(contrato_id, *args)
     assert all(r[:2] == (None, None) for r in _regioes_por_item(contrato_id).values())
+
+
+def test_excluir_em_massa_apaga_manual_e_marca_os_do_pdf():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(contrato_id, [_linha("60112"), _linha("60300")])
+    do_pdf = [i["id"] for i in medicoes_repo.listar_itens(contrato_id)]
+    manual = medicoes_repo.incluir_item(contrato_id, _novo())
+    outro = contratos_repo.registrar_do_pdf({**HEADER, "Contrato": "15 00999/2023 - X"})
+    alheio = medicoes_repo.incluir_item(outro, _novo())
+
+    assert medicoes_repo.excluir_itens(contrato_id, [*do_pdf, manual, alheio]) == 3
+
+    assert medicoes_repo.listar_itens(contrato_id) == []
+    assert len(medicoes_repo.listar_itens(outro)) == 1
+    with acquire_sync() as conn:
+        restantes = conn.execute(
+            "SELECT origem, excluido FROM medicao_item WHERE contrato_id = %s", (contrato_id,)
+        ).fetchall()
+    assert [dict(r) for r in restantes] == [{"origem": "pdf", "excluido": True}] * 2
+    medicoes_repo.gravar_itens(contrato_id, [_linha("60112"), _linha("60300")])
+    assert medicoes_repo.listar_itens(contrato_id) == []
+    assert medicoes_repo.excluir_itens(contrato_id, do_pdf) == 0
+
+
+def test_listar_filtra_por_arquivo():
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    medicoes_repo.gravar_itens(contrato_id, [_linha(arquivo="a.pdf"), _linha("60300", arquivo="b.pdf")])
+    medicoes_repo.incluir_item(contrato_id, _novo())
+    assert [i["codigo"] for i in medicoes_repo.listar_itens(contrato_id, arquivo="b.pdf")] == ["60300"]
+    assert [i["origem"] for i in medicoes_repo.listar_itens(contrato_id, arquivo="manual")] == ["manual"]

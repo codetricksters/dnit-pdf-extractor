@@ -156,6 +156,16 @@ class RegiaoAplicada(BaseModel):
     alterados: int
 
 
+class ExclusaoEmMassa(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[int] = Field(min_length=1)
+
+
+class MedicoesExcluidas(BaseModel):
+    excluidos: int
+
+
 class CodigoAssociado(BaseModel):
     codigo_servico: str
     descricao_pdf: str | None

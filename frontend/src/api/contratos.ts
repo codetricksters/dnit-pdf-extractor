@@ -27,7 +27,7 @@ export const urlPlanilha = (id: number, regioes: RegioesSimuladas) =>
 
 export const listarMedicoes = (id: number, filtros: FiltrosMedicoes) =>
   pedir<ItemMedicao[]>(`${BASE}/${id}/medicoes`, {
-    params: { mes: filtros.mes, no_calculo: filtros.noCalculo, q: filtros.q },
+    params: { mes: filtros.mes, no_calculo: filtros.noCalculo, q: filtros.q, arquivo: filtros.arquivo },
   })
 
 export const incluirMedicao = (id: number, corpo: MedicaoCorpo) =>
@@ -38,6 +38,9 @@ export const alterarMedicao = (id: number, itemId: number, corpo: MedicaoCorpo) 
 
 export const excluirMedicao = (id: number, itemId: number) =>
   pedir<void>(`${BASE}/${id}/medicoes/${itemId}`, { metodo: 'DELETE' })
+
+export const excluirMedicoes = (id: number, ids: number[]) =>
+  pedir<{ excluidos: number }>(`${BASE}/${id}/medicoes/excluir`, { metodo: 'POST', json: { ids } })
 
 // simular só conta os registros que mudariam, para a tela confirmar antes de gravar.
 export const aplicarRegiao = (id: number, corpo: RegiaoEmLote, simular = false) =>
