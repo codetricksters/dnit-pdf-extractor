@@ -14,6 +14,8 @@ from .schemas import (
     ItemMedicao,
     MedicaoNova,
     MedicaoPatch,
+    RegiaoAplicada,
+    RegiaoEmLote,
 )
 
 router = APIRouter(prefix="/contratos", tags=["contratos"])
@@ -99,6 +101,24 @@ def _alterar(contrato_id: int, item_id: int, dados: dict) -> dict:
 def _excluir(contrato_id: int, item_id: int) -> None:
     if not medicoes_repo.excluir_item(contrato_id, item_id):
         raise ErroApi(404, f"Registro {item_id} não encontrado neste contrato.")
+
+
+def _aplicar_regiao(contrato_id: int, dados: dict, simular: bool) -> dict:
+    if contratos_repo.buscar_por_id(contrato_id) is None:
+        raise ErroApi(404, f"Contrato {contrato_id} não encontrado.")
+    try:
+        return {"alterados": medicoes_repo.aplicar_regiao(contrato_id, **dados, simular=simular)}
+    except medicoes_repo.MedicaoInvalida as e:
+        raise ErroApi(422, str(e)) from e
+
+
+@router.post("/{contrato_id}/medicoes/regiao", response_model=RegiaoAplicada)
+async def aplicar_regiao(
+    contrato_id: int,
+    corpo: RegiaoEmLote,
+    simular: bool = Query(False, description="Só conta os registros, sem gravar"),
+):
+    return await asyncio.to_thread(_aplicar_regiao, contrato_id, corpo.model_dump(), simular)
 
 
 @router.post("/{contrato_id}/medicoes", response_model=ItemMedicao, status_code=201)

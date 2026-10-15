@@ -12,6 +12,7 @@ import { MensagemErro } from '../../components/MensagemErro'
 import { SeletorMes } from '../../components/SeletorMes'
 import { dinheiro, fator, mesAno, negativo } from '../../lib/formato'
 import { DialogoMedicao } from './DialogoMedicao'
+import { DialogoRegiaoLote } from './DialogoRegiaoLote'
 
 type Situacao = '' | 'true' | 'false'
 
@@ -25,6 +26,8 @@ export function AbaMedicoes() {
   const [filtros, setFiltros] = useState<FiltrosMedicoes>({})
   const [editando, setEditando] = useState<ItemMedicao | 'novo' | null>(null)
   const [excluindo, setExcluindo] = useState<ItemMedicao | null>(null)
+  const [regiaoLote, setRegiaoLote] = useState(false)
+  const [aviso, setAviso] = useState<string | null>(null)
   const qc = useQueryClient()
   const excluir = useMutation({
     mutationFn: (itemId: number) => excluirMedicao(contrato.id, itemId),
@@ -85,10 +88,14 @@ export function AbaMedicoes() {
         <button type="button" className="btn btn-primary" onClick={() => setEditando('novo')}>
           <Icone nome="add" /> Incluir registro
         </button>
+        <button type="button" className="btn" onClick={() => setRegiaoLote(true)} disabled={meses.length === 0}>
+          <Icone nome="map" /> Aplicar região
+        </button>
         <span className="espaco" />
         {itens.data && <span className="contagem">{itens.data.length} {itens.data.length === 1 ? 'item' : 'itens'}</span>}
       </form>
 
+      {aviso && <p className="contagem mt-md" role="status">{aviso}</p>}
       <MensagemErro erro={itens.error} />
       {itens.isPending && <Carregando />}
 
@@ -158,6 +165,17 @@ export function AbaMedicoes() {
           contratoId={contrato.id}
           item={editando === 'novo' ? undefined : editando}
           aoFechar={() => setEditando(null)}
+        />
+      )}
+      {regiaoLote && (
+        <DialogoRegiaoLote
+          contratoId={contrato.id}
+          meses={meses}
+          aoAplicar={(n) => {
+            setRegiaoLote(false)
+            setAviso(`Região aplicada em ${n} ${n === 1 ? 'registro' : 'registros'}.`)
+          }}
+          aoFechar={() => setRegiaoLote(false)}
         />
       )}
       {excluindo && (

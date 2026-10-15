@@ -127,3 +127,25 @@ async def test_lista_traz_origem_e_regioes(client):
     [item, *_] = await _medicoes(client, contrato_id)
     assert item["origem"] == "pdf"
     assert item["regiao_cap"] is None and item["regiao_emulsoes"] is None
+
+
+async def test_aplicar_regiao_em_lote(client):
+    indices_repo.gravar_precos_anp([semana(date(2023, 1, 9), "3.45", regiao="Sul")])
+    contrato_id = _contrato()
+    url = f"/api/v1/contratos/{contrato_id}/medicoes/regiao"
+    corpo = {"familia": "CAP", "mes_de": "2023-02", "mes_ate": "2023-03", "regiao": "sul"}
+
+    previa = await client.post(url, json=corpo, params={"simular": "true"})
+    assert previa.status_code == 200 and previa.json() == {"alterados": 2}
+    resposta = await client.post(url, json=corpo)
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json() == {"alterados": 2}
+    cap = [i for i in await _medicoes(client, contrato_id) if i["codigo"] == "60112"]
+    assert {i["regiao_cap"] for i in cap} == {"Sul"}
+
+    invalida = await client.post(url, json={**corpo, "regiao": "Marte"})
+    assert invalida.status_code == 422 and "regiao" in invalida.json()["detail"]
+    malformada = await client.post(url, json={**corpo, "familia": "ASFALTO"})
+    assert malformada.status_code == 422 and isinstance(malformada.json()["detail"], list)
+    ausente = await client.post("/api/v1/contratos/999/medicoes/regiao", json=corpo)
+    assert ausente.status_code == 404

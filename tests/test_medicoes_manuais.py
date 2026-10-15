@@ -174,3 +174,76 @@ def test_exportacao_prefere_o_registro_editado_ao_duplicado_de_outro_arquivo():
 
     primeiro = medicoes_repo.itens_para_export(contrato_id)[0]
     assert primeiro["id"] == antigo["id"] and primeiro["origem"] == "editado"
+
+
+ABR = "01/04/2023 - 30/04/2023"
+
+
+def _contrato_com_familias():
+    """Fev–abr de um CAP e de uma emulsão, mais um código fora do catálogo."""
+    from app.services import catalogo
+
+    _regioes()
+    contrato_id = contratos_repo.registrar_do_pdf(HEADER)
+    linhas = []
+    for periodo in (FEV, "01/03/2023 - 31/03/2023", ABR):
+        for codigo in ("60112", "60300", "40210"):
+            linhas.append({**_linha(codigo=codigo), "Período Líquido": periodo})
+    medicoes_repo.gravar_itens(contrato_id, linhas)
+    catalogo.registrar_codigo("60112", catalogo.novo_produto("CAP", "CAP"))
+    catalogo.registrar_codigo("60300", catalogo.novo_produto("RR-1C", "EMULSOES"))
+    return contrato_id
+
+
+def _regioes_por_item(contrato_id):
+    return {
+        (i["codigo"], i["mes"].month): (i["regiao_cap"], i["regiao_emulsoes"], i["origem"])
+        for i in medicoes_repo.listar_itens(contrato_id)
+    }
+
+
+def test_aplicar_regiao_so_na_familia_e_no_periodo():
+    contrato_id = _contrato_com_familias()
+    assert medicoes_repo.aplicar_regiao(
+        contrato_id, "EMULSOES", "2023-03", "2023-04", "sul", simular=True
+    ) == 2
+    assert all(r[:2] == (None, None) for r in _regioes_por_item(contrato_id).values())
+
+    assert medicoes_repo.aplicar_regiao(contrato_id, "EMULSOES", "2023-03", "2023-04", "sul") == 2
+
+    regioes = _regioes_por_item(contrato_id)
+    assert regioes[("60300", 3)] == (None, "Sul", "editado")
+    assert regioes[("60300", 4)] == (None, "Sul", "editado")
+    assert regioes[("60300", 2)] == (None, None, "pdf")
+    assert all(regioes[("60112", m)] == (None, None, "pdf") for m in (2, 3, 4))
+    assert all(regioes[("40210", m)] == (None, None, "pdf") for m in (2, 3, 4))
+
+
+def test_aplicar_regiao_num_mes_e_desfazer():
+    contrato_id = _contrato_com_familias()
+    assert medicoes_repo.aplicar_regiao(contrato_id, "CAP", "2023-02", "2023-02", "Nordeste") == 1
+    assert _regioes_por_item(contrato_id)[("60112", 2)] == ("Nordeste", None, "editado")
+
+    assert medicoes_repo.aplicar_regiao(contrato_id, "CAP", "2023-02", "2023-02", "") == 1
+    assert _regioes_por_item(contrato_id)[("60112", 2)][0] is None
+
+
+def test_aplicar_regiao_ignora_excluidos_e_outro_contrato():
+    contrato_id = _contrato_com_familias()
+    _sql("UPDATE medicao_item SET excluido = true WHERE codigo_servico = '60112' "
+         "AND mes_medicao = '2023-02-01'")
+    assert medicoes_repo.aplicar_regiao(contrato_id, "CAP", "2023-02", "2023-04", "Sul") == 2
+    assert medicoes_repo.aplicar_regiao(contrato_id + 1, "CAP", "2023-02", "2023-04", "Sul") == 0
+
+
+@pytest.mark.parametrize("args, trecho", [
+    (("ASFALTO", "2023-02", "2023-02", "Sul"), "familia"),
+    (("CAP", "2023-13", "2023-02", "Sul"), "mes_de"),
+    (("CAP", "2023-04", "2023-02", "Sul"), "mes_ate"),
+    (("CAP", "2023-02", "2023-02", "Marte"), "regiao"),
+])
+def test_aplicar_regiao_recusa_parametro_invalido(args, trecho):
+    contrato_id = _contrato_com_familias()
+    with pytest.raises(MedicaoInvalida, match=trecho):
+        medicoes_repo.aplicar_regiao(contrato_id, *args)
+    assert all(r[:2] == (None, None) for r in _regioes_por_item(contrato_id).values())

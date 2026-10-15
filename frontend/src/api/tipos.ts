@@ -81,6 +81,18 @@ export interface MedicaoCorpo {
   regiao_emulsoes?: string | null
 }
 
+// Região fixada de uma vez nos registros de uma família num período (AAAA-MM).
+export interface RegiaoEmLote {
+  familia: Familia
+  mes_de: string
+  mes_ate: string
+  regiao: string | null
+}
+
+export interface RegiaoAplicada {
+  alterados: number
+}
+
 export interface LinhaCalculo {
   mes: string
   a: Decimal

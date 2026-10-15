@@ -141,6 +141,21 @@ class MedicaoPatch(BaseModel):
     regiao_emulsoes: str | None = None
 
 
+class RegiaoEmLote(BaseModel):
+    """Região fixada de uma vez nos registros de uma família num período."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    familia: Familia
+    mes_de: Annotated[str, StringConstraints(pattern=MES)]
+    mes_ate: Annotated[str, StringConstraints(pattern=MES)]
+    regiao: str | None = None
+
+
+class RegiaoAplicada(BaseModel):
+    alterados: int
+
+
 class CodigoAssociado(BaseModel):
     codigo_servico: str
     descricao_pdf: str | None

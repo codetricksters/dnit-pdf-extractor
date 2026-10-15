@@ -1,6 +1,8 @@
 import type { FiltrosMedicoes, RegioesSimuladas } from './chaves'
 import { caminhoCom, pedir } from './client'
-import type { Calculo, Contrato, ContratoPatch, ContratoResumo, ItemMedicao, MedicaoCorpo } from './tipos'
+import type {
+  Calculo, Contrato, ContratoPatch, ContratoResumo, ItemMedicao, MedicaoCorpo, RegiaoEmLote, RegiaoAplicada,
+} from './tipos'
 
 const BASE = '/api/v1/contratos'
 
@@ -36,3 +38,9 @@ export const alterarMedicao = (id: number, itemId: number, corpo: MedicaoCorpo) 
 
 export const excluirMedicao = (id: number, itemId: number) =>
   pedir<void>(`${BASE}/${id}/medicoes/${itemId}`, { metodo: 'DELETE' })
+
+// simular só conta os registros que mudariam, para a tela confirmar antes de gravar.
+export const aplicarRegiao = (id: number, corpo: RegiaoEmLote, simular = false) =>
+  pedir<RegiaoAplicada>(`${BASE}/${id}/medicoes/regiao`, {
+    metodo: 'POST', json: corpo, params: { simular: simular || undefined },
+  })

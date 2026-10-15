@@ -78,7 +78,9 @@ corrigida; a região da ANP de cada família é obrigatória para calcular.
 registros um a um. Em cada registro dá para fixar a região da ANP de CAP e/ou de
 Emulsões: ele passa a ser calculado por essa região, que vale mais que a do
 cadastro e que a simulação, e aparece na tela e na planilha como uma linha
-própria, marcada com `*`, colorida e com uma nota. Quando o PDF é reenviado, o
+própria, marcada com `*`, colorida e com uma nota. *Aplicar região* fixa a mesma
+região de uma vez em todos os registros de uma família num mês ou num período de
+meses, depois de mostrar quantos registros vão mudar. Quando o PDF é reenviado, o
 que foi editado ou incluído à mão é preservado e o que foi excluído não volta.
 
 **Templates e backup pela interface.** Quem roda em Docker não precisa de

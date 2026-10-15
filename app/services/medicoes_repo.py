@@ -249,11 +249,9 @@ def _validar(dados: dict, *, completo: bool) -> dict:
         if campo in obrigatorios and valor in (None, ""):
             continue
         if campo == "mes":
-            achado = _MES_RE.match(str(valor or ""))
-            if not achado:
-                erros.append("mes: mês inválido; use AAAA-MM.")
-                continue
-            colunas["mes_medicao"] = date(int(achado[1]), int(achado[2]), 1)
+            mes = _mes("mes", valor, erros)
+            if mes is not None:
+                colunas["mes_medicao"] = mes
         elif campo == "codigo":
             codigo = str(valor or "").strip()
             if not _CODIGO_RE.match(codigo):
@@ -269,20 +267,77 @@ def _validar(dados: dict, *, completo: bool) -> dict:
         elif campo == "descricao_pdf":
             colunas[campo] = (str(valor).strip() or None) if valor is not None else None
         else:  # regiao_cap / regiao_emulsoes
-            if valor in (None, ""):
-                colunas[campo] = None
-                continue
-            grafia = indices_repo.normalizar_regiao(str(valor))
-            if grafia is None:
-                erros.append(
-                    f"{campo}: região {valor!r} sem preços ANP do CAP 50/70; "
-                    "escolha uma das regiões importadas."
-                )
-                continue
-            colunas[campo] = grafia
+            colunas[campo] = _regiao(campo, valor, erros)
     if erros:
         raise MedicaoInvalida("\n".join(erros))
     return colunas
+
+
+def _regiao(campo: str, valor, erros: list[str]) -> str | None:
+    """A região na grafia do arquivo da ANP; vazio é seguir o contrato."""
+    if valor in (None, ""):
+        return None
+    grafia = indices_repo.normalizar_regiao(str(valor))
+    if grafia is None:
+        erros.append(
+            f"{campo}: região {valor!r} sem preços ANP do CAP 50/70; "
+            "escolha uma das regiões importadas."
+        )
+    return grafia
+
+
+def _mes(campo: str, valor, erros: list[str]) -> date | None:
+    achado = _MES_RE.match(str(valor or ""))
+    if not achado:
+        erros.append(f"{campo}: mês inválido; use AAAA-MM.")
+        return None
+    return date(int(achado[1]), int(achado[2]), 1)
+
+
+_COLUNA_REGIAO = {"CAP": "regiao_cap", "EMULSOES": "regiao_emulsoes"}
+
+
+def aplicar_regiao(contrato_id: int, familia: str, mes_de: str, mes_ate: str,
+                   regiao: str | None, *, simular: bool = False) -> int:
+    """Fixa *regiao* em todos os registros da família no período; devolve quantos.
+
+    É a mesma região por registro de ``atualizar_item``, gravada de uma vez nos
+    registros cujo código pertence a um produto da *familia* e cujo mês está entre
+    *mes_de* e *mes_ate* (``AAAA-MM``, inclusive). Região vazia volta a seguir o
+    contrato. Um registro do PDF passa a 'editado'. ``simular`` só conta, para a
+    tela confirmar antes de gravar.
+    """
+    erros: list[str] = []
+    coluna = _COLUNA_REGIAO.get(familia)
+    if coluna is None:
+        erros.append("familia: use CAP ou EMULSOES.")
+    inicio = _mes("mes_de", mes_de, erros)
+    fim = _mes("mes_ate", mes_ate, erros)
+    if inicio and fim and inicio > fim:
+        erros.append("mes_ate: o período termina antes de começar.")
+    grafia = _regiao("regiao", regiao, erros)
+    if erros:
+        raise MedicaoInvalida("\n".join(erros))
+    produtos = "produto_codigo pc JOIN produto p ON p.id = pc.produto_id"
+    alcance = (
+        "WHERE pc.codigo_servico = m.codigo_servico AND p.familia = %(familia)s "
+        "  AND m.contrato_id = %(contrato)s AND NOT m.excluido "
+        "  AND m.mes_medicao BETWEEN %(inicio)s AND %(fim)s"
+    )
+    params = {"regiao": grafia, "familia": familia, "contrato": contrato_id,
+              "inicio": inicio, "fim": fim}
+    with acquire_sync() as conn:
+        if simular:
+            return conn.execute(
+                f"SELECT count(*) AS n FROM medicao_item m, {produtos} {alcance}", params
+            ).fetchone()["n"]
+        cur = conn.execute(
+            f"UPDATE medicao_item m SET {coluna} = %(regiao)s, atualizado_em = now(), "
+            "  origem = CASE m.origem WHEN 'pdf' THEN 'editado' ELSE m.origem END "
+            f"FROM {produtos} {alcance}",
+            params,
+        )
+        return cur.rowcount
 
 
 def buscar_item(contrato_id: int, item_id: int) -> dict | None:
