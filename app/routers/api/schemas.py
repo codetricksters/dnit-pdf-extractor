@@ -142,13 +142,11 @@ class MedicaoPatch(BaseModel):
 
 
 class RegiaoEmLote(BaseModel):
-    """Região fixada de uma vez nos registros de uma família num período."""
+    """Região fixada de uma vez nos registros marcados na tela."""
 
     model_config = ConfigDict(extra="forbid")
 
-    familia: Familia
-    mes_de: Annotated[str, StringConstraints(pattern=MES)]
-    mes_ate: Annotated[str, StringConstraints(pattern=MES)]
+    ids: list[int] = Field(min_length=1)
     regiao: str | None = None
 
 

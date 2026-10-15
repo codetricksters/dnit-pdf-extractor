@@ -83,9 +83,7 @@ export interface MedicaoCorpo {
 
 // Região fixada de uma vez nos registros de uma família num período (AAAA-MM).
 export interface RegiaoEmLote {
-  familia: Familia
-  mes_de: string
-  mes_ate: string
+  ids: number[]
   regiao: string | null
 }
 

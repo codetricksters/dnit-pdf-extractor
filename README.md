@@ -82,8 +82,9 @@ de origem, *Selecionar todos* marca tudo o que veio de um PDF. Em cada registro 
 Emulsões: ele passa a ser calculado por essa região, que vale mais que a do
 cadastro e que a simulação, e aparece na tela e na planilha como uma linha
 própria, marcada com `*`, colorida e com uma nota. *Aplicar região* fixa a mesma
-região de uma vez em todos os registros de uma família num mês ou num período de
-meses, depois de mostrar quantos registros vão mudar. Quando o PDF é reenviado, o
+região de uma vez nos registros selecionados — cada um na família do seu produto;
+para cobrir um período, filtre pelo código e use *Selecionar todos* —, depois de
+mostrar quantos registros vão mudar. Quando o PDF é reenviado, o
 que foi editado ou incluído à mão é preservado e o que foi excluído não volta — a
 menos que o envio marque *Atualizar registros já importados*: depois de uma
 confirmação, os registros daqueles arquivos voltam a ser os do PDF, desfazendo

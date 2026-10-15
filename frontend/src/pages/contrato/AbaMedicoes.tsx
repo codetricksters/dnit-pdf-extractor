@@ -125,8 +125,8 @@ export function AbaMedicoes() {
         <button type="button" className="btn btn-primary" onClick={() => setEditando('novo')}>
           <Icone nome="add" /> Incluir registro
         </button>
-        <button type="button" className="btn" onClick={() => setRegiaoLote(true)} disabled={meses.length === 0}>
-          <Icone nome="map" /> Aplicar região
+        <button type="button" className="btn" onClick={() => setRegiaoLote(true)} disabled={selecionados.length === 0}>
+          <Icone nome="map" /> Aplicar região ({selecionados.length})
         </button>
         <button
           type="button"
@@ -231,9 +231,10 @@ export function AbaMedicoes() {
       {regiaoLote && (
         <DialogoRegiaoLote
           contratoId={contrato.id}
-          meses={meses}
+          ids={selecionados}
           aoAplicar={(n) => {
             setRegiaoLote(false)
+            setMarcados([])
             setAviso(`Região aplicada em ${n} ${n === 1 ? 'registro' : 'registros'}.`)
           }}
           aoFechar={() => setRegiaoLote(false)}

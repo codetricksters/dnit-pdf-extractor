@@ -345,42 +345,39 @@ def _conferir_familia(conn, codigo: str, colunas: dict) -> None:
         raise MedicaoInvalida("\n".join(erros))
 
 
-def aplicar_regiao(contrato_id: int, familia: str, mes_de: str, mes_ate: str,
-                   regiao: str | None, *, simular: bool = False) -> int:
-    """Fixa *regiao* em todos os registros da família no período; devolve quantos.
+def aplicar_regiao(contrato_id: int, ids: list[int], regiao: str | None, *,
+                   simular: bool = False) -> int:
+    """Fixa *regiao* nos registros *ids* do contrato; devolve quantos.
 
     É a mesma região por registro de ``atualizar_item``, gravada de uma vez nos
-    registros cujo código pertence a um produto da *familia* e cujo mês está entre
-    *mes_de* e *mes_ate* (``AAAA-MM``, inclusive). Região vazia volta a seguir o
+    registros que o usuário marcou. Cada um recebe a região na coluna da família
+    do seu produto, então uma seleção com CAP e emulsões vale para as duas; um
+    código sem produto fica de fora, porque a região não teria efeito no cálculo.
+    Excluídos e ids de outro contrato não contam. Região vazia volta a seguir o
     contrato. Um registro do PDF passa a 'editado'. ``simular`` só conta, para a
     tela confirmar antes de gravar.
     """
     erros: list[str] = []
-    coluna = _COLUNA_REGIAO.get(familia)
-    if coluna is None:
-        erros.append("familia: use CAP ou EMULSOES.")
-    inicio = _mes("mes_de", mes_de, erros)
-    fim = _mes("mes_ate", mes_ate, erros)
-    if inicio and fim and inicio > fim:
-        erros.append("mes_ate: o período termina antes de começar.")
     grafia = _regiao("regiao", regiao, erros)
     if erros:
         raise MedicaoInvalida("\n".join(erros))
     produtos = "produto_codigo pc JOIN produto p ON p.id = pc.produto_id"
     alcance = (
-        "WHERE pc.codigo_servico = m.codigo_servico AND p.familia = %(familia)s "
-        "  AND m.contrato_id = %(contrato)s AND NOT m.excluido "
-        "  AND m.mes_medicao BETWEEN %(inicio)s AND %(fim)s"
+        "WHERE pc.codigo_servico = m.codigo_servico AND p.familia IN ('CAP', 'EMULSOES') "
+        "  AND m.contrato_id = %(contrato)s AND m.id = ANY(%(ids)s) AND NOT m.excluido"
     )
-    params = {"regiao": grafia, "familia": familia, "contrato": contrato_id,
-              "inicio": inicio, "fim": fim}
+    params = {"regiao": grafia, "contrato": contrato_id, "ids": ids}
     with acquire_sync() as conn:
         if simular:
             return conn.execute(
                 f"SELECT count(*) AS n FROM medicao_item m, {produtos} {alcance}", params
             ).fetchone()["n"]
         cur = conn.execute(
-            f"UPDATE medicao_item m SET {coluna} = %(regiao)s, atualizado_em = now(), "
+            "UPDATE medicao_item m SET "
+            "  regiao_cap = CASE WHEN p.familia = 'CAP' THEN %(regiao)s ELSE m.regiao_cap END, "
+            "  regiao_emulsoes = CASE WHEN p.familia = 'EMULSOES' THEN %(regiao)s "
+            "    ELSE m.regiao_emulsoes END, "
+            "  atualizado_em = now(), "
             "  origem = CASE m.origem WHEN 'pdf' THEN 'editado' ELSE m.origem END "
             f"FROM {produtos} {alcance}",
             params,

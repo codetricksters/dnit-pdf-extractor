@@ -194,38 +194,49 @@ describe('Aba Medições', () => {
     await waitFor(() => expect(excluiu).toBe(true))
   })
 
-  it('aplica a região a uma família num período, depois de mostrar quantos registros mudam', async () => {
-    prepararEdicao([umItem(), umItem({ id: 2, mes: '2023-03-01' }), umItem({ id: 3, mes: '2023-04-01' })])
+  it('aplica a região só aos registros marcados, depois de mostrar quantos mudam', async () => {
+    prepararEdicao([
+      umItem(),
+      umItem({ id: 2, mes: '2023-03-01' }),
+      umItem({ id: 3, codigo: '40210', produto_id: null, produto: null, familia: null }),
+    ])
     const pedidos: { simular: string | null; corpo: unknown }[] = []
     servidor.use(http.post('/api/v1/contratos/1/medicoes/regiao', async ({ request }) => {
       pedidos.push({ simular: new URL(request.url).searchParams.get('simular'), corpo: await request.json() })
-      return HttpResponse.json({ alterados: 2 })
+      return HttpResponse.json({ alterados: 1 })
     }))
     const { usuario } = renderApp('/contratos/1/medicoes')
-    await usuario.click(await screen.findByRole('button', { name: /Aplicar região/ }))
+    await screen.findAllByText('60112')
+    expect(screen.getByRole('button', { name: /Aplicar região/ })).toBeDisabled()
+
+    await usuario.click(screen.getByLabelText('Selecionar 60112 de mar/2023'))
+    await usuario.click(screen.getByLabelText('Selecionar 40210 de fev/2023'))
+    await usuario.click(screen.getByRole('button', { name: 'Aplicar região (2)' }))
     const dialogo = screen.getByRole('dialog')
-    await usuario.selectOptions(within(dialogo).getByLabelText('Família'), 'EMULSOES')
-    await usuario.selectOptions(within(dialogo).getByLabelText('De'), '2023-03')
-    await usuario.selectOptions(within(dialogo).getByLabelText('Até'), '2023-04')
+    expect(within(dialogo).queryByLabelText('Família')).not.toBeInTheDocument()
     await usuario.selectOptions(within(dialogo).getByLabelText('Região ANP'), 'Sul')
     await usuario.click(within(dialogo).getByRole('button', { name: 'Continuar' }))
 
-    expect(await within(dialogo).findByText(/2 registros de Emulsões/)).toBeInTheDocument()
+    expect(await within(dialogo).findByText(/1 de 2 registros selecionados passará a usar a região Sul/))
+      .toBeInTheDocument()
+    expect(within(dialogo).getByText(/os demais não têm produto no cálculo/)).toBeInTheDocument()
     await usuario.click(within(dialogo).getByRole('button', { name: 'Aplicar região' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    const corpo = { familia: 'EMULSOES', mes_de: '2023-03', mes_ate: '2023-04', regiao: 'Sul' }
+    const corpo = { ids: [2, 3], regiao: 'Sul' }
     expect(pedidos).toEqual([{ simular: 'true', corpo }, { simular: null, corpo }])
-    expect(screen.getByText('Região aplicada em 2 registros.')).toBeInTheDocument()
+    expect(screen.getByText('Região aplicada em 1 registro.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Aplicar região/ })).toBeDisabled()
   })
 
   it('mostra o erro do backend ao aplicar a região', async () => {
     prepararEdicao([umItem()])
     servidor.use(http.post('/api/v1/contratos/1/medicoes/regiao', () =>
-      HttpResponse.json({ detail: 'mes_ate: o período termina antes de começar.' }, { status: 422 })))
+      HttpResponse.json({ detail: "regiao: região 'Marte' sem preços ANP do CAP 50/70." }, { status: 422 })))
     const { usuario } = renderApp('/contratos/1/medicoes')
-    await usuario.click(await screen.findByRole('button', { name: /Aplicar região/ }))
+    await usuario.click(await screen.findByLabelText('Selecionar 60112 de fev/2023'))
+    await usuario.click(screen.getByRole('button', { name: /Aplicar região/ }))
     await usuario.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Continuar' }))
-    expect(await screen.findByText('mes_ate: o período termina antes de começar.')).toBeInTheDocument()
+    expect(await screen.findByText("regiao: região 'Marte' sem preços ANP do CAP 50/70.")).toBeInTheDocument()
   })
 
   it('filtra por arquivo, com os manuais numa opção própria', async () => {

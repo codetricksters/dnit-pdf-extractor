@@ -202,14 +202,20 @@ def _regioes_por_item(contrato_id):
     }
 
 
-def test_aplicar_regiao_so_na_familia_e_no_periodo():
+def _ids(contrato_id, *chaves):
+    """Os ids dos registros (código, mês) indicados."""
+    por_chave = {(i["codigo"], i["mes"].month): i["id"]
+                 for i in medicoes_repo.listar_itens(contrato_id)}
+    return [por_chave[c] for c in chaves]
+
+
+def test_aplicar_regiao_so_nos_registros_marcados():
     contrato_id = _contrato_com_familias()
-    assert medicoes_repo.aplicar_regiao(
-        contrato_id, "EMULSOES", "2023-03", "2023-04", "sul", simular=True
-    ) == 2
+    ids = _ids(contrato_id, ("60300", 3), ("60300", 4))
+    assert medicoes_repo.aplicar_regiao(contrato_id, ids, "sul", simular=True) == 2
     assert all(r[:2] == (None, None) for r in _regioes_por_item(contrato_id).values())
 
-    assert medicoes_repo.aplicar_regiao(contrato_id, "EMULSOES", "2023-03", "2023-04", "sul") == 2
+    assert medicoes_repo.aplicar_regiao(contrato_id, ids, "sul") == 2
 
     regioes = _regioes_por_item(contrato_id)
     assert regioes[("60300", 3)] == (None, "Sul", "editado")
@@ -219,33 +225,42 @@ def test_aplicar_regiao_so_na_familia_e_no_periodo():
     assert all(regioes[("40210", m)] == (None, None, "pdf") for m in (2, 3, 4))
 
 
-def test_aplicar_regiao_num_mes_e_desfazer():
+def test_aplicar_regiao_grava_cada_familia_na_sua_coluna():
     contrato_id = _contrato_com_familias()
-    assert medicoes_repo.aplicar_regiao(contrato_id, "CAP", "2023-02", "2023-02", "Nordeste") == 1
-    assert _regioes_por_item(contrato_id)[("60112", 2)] == ("Nordeste", None, "editado")
+    ids = _ids(contrato_id, ("60112", 2), ("60300", 2), ("40210", 2))
 
-    assert medicoes_repo.aplicar_regiao(contrato_id, "CAP", "2023-02", "2023-02", "") == 1
+    # O código sem produto fica de fora: a região não teria efeito no cálculo.
+    assert medicoes_repo.aplicar_regiao(contrato_id, ids, "Nordeste", simular=True) == 2
+    assert medicoes_repo.aplicar_regiao(contrato_id, ids, "Nordeste") == 2
+
+    regioes = _regioes_por_item(contrato_id)
+    assert regioes[("60112", 2)] == ("Nordeste", None, "editado")
+    assert regioes[("60300", 2)] == (None, "Nordeste", "editado")
+    assert regioes[("40210", 2)] == (None, None, "pdf")
+
+
+def test_aplicar_regiao_vazia_volta_a_seguir_o_contrato():
+    contrato_id = _contrato_com_familias()
+    ids = _ids(contrato_id, ("60112", 2))
+    medicoes_repo.aplicar_regiao(contrato_id, ids, "Nordeste")
+
+    assert medicoes_repo.aplicar_regiao(contrato_id, ids, "") == 1
     assert _regioes_por_item(contrato_id)[("60112", 2)][0] is None
 
 
 def test_aplicar_regiao_ignora_excluidos_e_outro_contrato():
     contrato_id = _contrato_com_familias()
-    _sql("UPDATE medicao_item SET excluido = true WHERE codigo_servico = '60112' "
-         "AND mes_medicao = '2023-02-01'")
-    assert medicoes_repo.aplicar_regiao(contrato_id, "CAP", "2023-02", "2023-04", "Sul") == 2
-    assert medicoes_repo.aplicar_regiao(contrato_id + 1, "CAP", "2023-02", "2023-04", "Sul") == 0
+    ids = _ids(contrato_id, ("60112", 2), ("60112", 3), ("60112", 4))
+    _sql("UPDATE medicao_item SET excluido = true WHERE id = %s", ids[0])
+    assert medicoes_repo.aplicar_regiao(contrato_id, ids, "Sul") == 2
+    assert medicoes_repo.aplicar_regiao(contrato_id + 1, ids, "Sul") == 0
 
 
-@pytest.mark.parametrize("args, trecho", [
-    (("ASFALTO", "2023-02", "2023-02", "Sul"), "familia"),
-    (("CAP", "2023-13", "2023-02", "Sul"), "mes_de"),
-    (("CAP", "2023-04", "2023-02", "Sul"), "mes_ate"),
-    (("CAP", "2023-02", "2023-02", "Marte"), "regiao"),
-])
-def test_aplicar_regiao_recusa_parametro_invalido(args, trecho):
+def test_aplicar_regiao_recusa_regiao_invalida():
     contrato_id = _contrato_com_familias()
-    with pytest.raises(MedicaoInvalida, match=trecho):
-        medicoes_repo.aplicar_regiao(contrato_id, *args)
+    ids = _ids(contrato_id, ("60112", 2))
+    with pytest.raises(MedicaoInvalida, match="regiao"):
+        medicoes_repo.aplicar_regiao(contrato_id, ids, "Marte")
     assert all(r[:2] == (None, None) for r in _regioes_por_item(contrato_id).values())
 
 

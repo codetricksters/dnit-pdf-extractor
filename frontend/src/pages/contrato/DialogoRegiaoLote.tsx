@@ -4,30 +4,27 @@ import { chaves } from '../../api/chaves'
 import { aplicarRegiao } from '../../api/contratos'
 import { buscarCobertura } from '../../api/indices'
 import { aposMedicao } from '../../api/invalidar'
-import { FAMILIAS, ROTULO_FAMILIA, type Familia, type RegiaoEmLote } from '../../api/tipos'
+import type { RegiaoEmLote } from '../../api/tipos'
 import { Dialogo } from '../../components/Dialogo'
 import { MensagemErro } from '../../components/MensagemErro'
-import { mesAno } from '../../lib/formato'
 
 interface Props {
   contratoId: number
-  meses: string[] // AAAA-MM, do mais recente ao mais antigo
+  ids: number[] // os registros marcados na tabela
   aoAplicar: (alterados: number) => void
   aoFechar: () => void
 }
 
-// A região por registro gravada de uma vez numa família e num período. Primeiro o
-// backend conta os registros (simular), e só depois da confirmação grava.
-export function DialogoRegiaoLote({ contratoId, meses, aoAplicar, aoFechar }: Props) {
+// A região por registro gravada de uma vez nos registros marcados; cada um a recebe na
+// família do seu produto. Primeiro o backend conta os registros (simular), e só depois da
+// confirmação grava.
+export function DialogoRegiaoLote({ contratoId, ids, aoAplicar, aoFechar }: Props) {
   const qc = useQueryClient()
   const cobertura = useQuery({ queryKey: chaves.cobertura, queryFn: buscarCobertura })
-  const [familia, setFamilia] = useState<Familia>('CAP')
-  const [de, setDe] = useState(meses.at(-1) ?? '')
-  const [ate, setAte] = useState(meses[0] ?? '')
   const [regiao, setRegiao] = useState('')
   const [previa, setPrevia] = useState<number | null>(null)
 
-  const corpo: RegiaoEmLote = { familia, mes_de: de, mes_ate: ate, regiao: regiao || null }
+  const corpo: RegiaoEmLote = { ids, regiao: regiao || null }
   const simular = useMutation({
     mutationFn: () => aplicarRegiao(contratoId, corpo, true),
     onSuccess: (r) => setPrevia(r.alterados),
@@ -40,20 +37,13 @@ export function DialogoRegiaoLote({ contratoId, meses, aoAplicar, aoFechar }: Pr
     },
   })
 
-  function mudou<T>(definir: (v: T) => void) {
-    return (v: T) => {
-      definir(v)
-      setPrevia(null)
-    }
-  }
-
   function continuar(e: FormEvent) {
     e.preventDefault()
     simular.mutate()
   }
 
-  const opcoesMes = meses.map((m) => <option key={m} value={m}>{mesAno(`${m}-01`)}</option>)
   const destino = regiao ? `a região ${regiao}` : 'a região do contrato'
+  const total = `${ids.length} ${ids.length === 1 ? 'registro selecionado' : 'registros selecionados'}`
 
   return (
     <Dialogo
@@ -81,31 +71,16 @@ export function DialogoRegiaoLote({ contratoId, meses, aoAplicar, aoFechar }: Pr
     >
       <form id="form-regiao-lote" onSubmit={continuar}>
         <div className="field">
-          <label className="field-label" htmlFor="lote-familia">Família</label>
-          <select
-            id="lote-familia"
-            className="input"
-            value={familia}
-            onChange={(e) => mudou(setFamilia)(e.target.value as Familia)}
-          >
-            {FAMILIAS.map((f) => <option key={f} value={f}>{ROTULO_FAMILIA[f]}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label className="field-label" htmlFor="lote-de">De</label>
-          <select id="lote-de" className="input" value={de} onChange={(e) => mudou(setDe)(e.target.value)}>
-            {opcoesMes}
-          </select>
-        </div>
-        <div className="field">
-          <label className="field-label" htmlFor="lote-ate">Até</label>
-          <select id="lote-ate" className="input" value={ate} onChange={(e) => mudou(setAte)(e.target.value)}>
-            {opcoesMes}
-          </select>
-        </div>
-        <div className="field">
           <label className="field-label" htmlFor="lote-regiao">Região ANP</label>
-          <select id="lote-regiao" className="input" value={regiao} onChange={(e) => mudou(setRegiao)(e.target.value)}>
+          <select
+            id="lote-regiao"
+            className="input"
+            value={regiao}
+            onChange={(e) => {
+              setRegiao(e.target.value)
+              setPrevia(null)
+            }}
+          >
             <option value="">Seguir o contrato</option>
             {(cobertura.data?.regioes ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
@@ -114,8 +89,9 @@ export function DialogoRegiaoLote({ contratoId, meses, aoAplicar, aoFechar }: Pr
       {previa !== null && (
         <p role="status">
           {previa === 0
-            ? 'Nenhum registro dessa família no período.'
-            : `${previa} ${previa === 1 ? 'registro' : 'registros'} de ${ROTULO_FAMILIA[familia]} de ${mesAno(`${de}-01`)} a ${mesAno(`${ate}-01`)} passarão a usar ${destino}.`}
+            ? 'Nenhum dos registros selecionados tem produto no cálculo.'
+            : `${previa} de ${total} ${previa === 1 ? 'passará' : 'passarão'} a usar ${destino}` +
+              (previa < ids.length ? '; os demais não têm produto no cálculo.' : '.')}
         </p>
       )}
       <MensagemErro erro={simular.error ?? gravar.error} />

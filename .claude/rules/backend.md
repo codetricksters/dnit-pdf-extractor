@@ -150,12 +150,13 @@ calculation or the file. Clearing is always accepted, and a code without a
 product accepts both.
 `listar_itens` and `itens_para_export` ignore `excluido`.
 
-`aplicar_regiao(contrato_id, familia, mes_de, mes_ate, regiao, simular=False)` is
-the same pin written in bulk: one `UPDATE` sets `regiao_<familia>` on every
-non-deleted record of the contract whose code belongs to a product of that family
-and whose month is within `mes_de`–`mes_ate` (`AAAA-MM`, inclusive), turning
-`'pdf'` into `'editado'` like a single edit. It is a write, not a rule: records
-imported later for those months arrive without the region. `simular=True` only
+`aplicar_regiao(contrato_id, ids, regiao, simular=False)` is the same pin
+written in bulk on the records the user selected: one `UPDATE` sets, on each
+non-deleted record of the contract among `ids`, the region column of **its
+product's family** (`regiao_cap` or `regiao_emulsoes`), so a mixed selection works;
+records whose code has no product, and ids of another contract, are skipped. It
+turns `'pdf'` into `'editado'` like a single edit. It is a write, not a rule: records
+imported later arrive without the region. `simular=True` only
 counts, so the screen can confirm before writing.
 
 ### catalogo.py
@@ -391,8 +392,8 @@ Endpoints that exist for the React interface: `GET /contratos/{id}/medicoes?mes=
 product), `GET /indices/anp/produtos`, `manuais` in each series of
 `GET /indices/cobertura`, `POST /contratos/{id}/medicoes` (201),
 `PATCH /contratos/{id}/medicoes/{item_id}` and `DELETE …/{item_id}` (204),
-`POST /contratos/{id}/medicoes/regiao?simular=` (`{familia, mes_de, mes_ate,
-regiao}` → `{"alterados": n}`), `POST /contratos/{id}/medicoes/excluir` (`{"ids":
+`POST /contratos/{id}/medicoes/regiao?simular=` (`{ids: [...], regiao}` →
+`{"alterados": n}`), `POST /contratos/{id}/medicoes/excluir` (`{"ids":
 [...]}` → `{"excluidos": n}`; POST because proxies drop a DELETE body) — 404
 for an unknown contract or record, `MedicaoInvalida` becomes `ErroApi(422)` with a
 text `detail` of `campo: mensagem` lines — and `arquivo` in the cálculo JSON — the filename the
