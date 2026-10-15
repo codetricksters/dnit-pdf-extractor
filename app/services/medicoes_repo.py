@@ -317,6 +317,32 @@ def _mes(campo: str, valor, erros: list[str]) -> date | None:
 
 
 _COLUNA_REGIAO = {"CAP": "regiao_cap", "EMULSOES": "regiao_emulsoes"}
+_ROTULO_FAMILIA = {"CAP": "CAP", "EMULSOES": "Emulsões"}
+
+
+def _conferir_familia(conn, codigo: str, colunas: dict) -> None:
+    """Recusa a região da família a que o código não pertence.
+
+    O cálculo só lê a região da família do produto (``_anotar_regioes``): a da
+    outra seria gravada e mostrada na lista sem efeito nenhum no cálculo nem na
+    planilha. Limpar é sempre aceito, e um código sem produto aceita as duas.
+    """
+    linha = conn.execute(
+        "SELECT p.familia FROM produto_codigo pc JOIN produto p ON p.id = pc.produto_id "
+        "WHERE pc.codigo_servico = %s",
+        (codigo,),
+    ).fetchone()
+    if linha is None:
+        return
+    familia = linha["familia"]
+    erros = [
+        f"{coluna}: o código {codigo} é de {_ROTULO_FAMILIA[familia]}; "
+        f"só a região de {_ROTULO_FAMILIA[familia]} vale para ele."
+        for outra, coluna in _COLUNA_REGIAO.items()
+        if outra != familia and colunas.get(coluna) is not None
+    ]
+    if erros:
+        raise MedicaoInvalida("\n".join(erros))
 
 
 def aplicar_regiao(contrato_id: int, familia: str, mes_de: str, mes_ate: str,
@@ -378,6 +404,7 @@ def incluir_item(contrato_id: int, dados: dict) -> int | None:
     with acquire_sync() as conn:
         if conn.execute("SELECT 1 FROM contrato WHERE id = %s", (contrato_id,)).fetchone() is None:
             return None
+        _conferir_familia(conn, colunas["codigo_servico"], colunas)
         cur = conn.execute(
             "INSERT INTO medicao_item (contrato_id, codigo_servico, descricao_pdf, "
             "  mes_medicao, valor_pi, fator, source_file, origem, regiao_cap, "
@@ -399,7 +426,7 @@ def atualizar_item(contrato_id: int, item_id: int, dados: dict) -> bool:
     colunas = _validar(dados, completo=False)
     with acquire_sync() as conn:
         atual = conn.execute(
-            "SELECT origem FROM medicao_item "
+            "SELECT origem, codigo_servico FROM medicao_item "
             "WHERE contrato_id = %s AND id = %s AND NOT excluido",
             (contrato_id, item_id),
         ).fetchone()
@@ -412,6 +439,7 @@ def atualizar_item(contrato_id: int, item_id: int, dados: dict) -> bool:
             )
         if not colunas:
             return True
+        _conferir_familia(conn, colunas.get("codigo_servico", atual["codigo_servico"]), colunas)
         atribuicoes = ", ".join(f"{c} = %({c})s" for c in colunas)
         conn.execute(
             f"UPDATE medicao_item SET {atribuicoes}, atualizado_em = now(), "

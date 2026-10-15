@@ -34,6 +34,11 @@ export function DialogoMedicao({ contratoId, item, aoFechar }: Props) {
   const sujos = formState.dirtyFields
   const travado = item !== undefined && item.origem !== 'manual'
   const regioes = cobertura.data?.regioes ?? []
+  // O cálculo só lê a região da família do produto; a da outra não teria efeito.
+  // Um valor já gravado na outra continua à vista, para poder ser limpo.
+  const camposRegiao = (['regiao_cap', 'regiao_emulsoes'] as const).filter(
+    (campo) => !item?.familia || campo === `regiao_${item.familia.toLowerCase()}` || item[campo] !== null,
+  )
 
   const salvar = useMutation({
     mutationFn: (v: ValoresMedicao) =>
@@ -121,7 +126,7 @@ export function DialogoMedicao({ contratoId, item, aoFechar }: Props) {
           <input id="medicao-fator" className="input" inputMode="decimal" {...register('fator')} {...aria('fator')} />
           {erro('fator')}
         </div>
-        {(['regiao_cap', 'regiao_emulsoes'] as const).map((campo) => (
+        {camposRegiao.map((campo) => (
           <div className="field" key={campo}>
             <label className="field-label" htmlFor={`medicao-${campo}`}>
               {campo === 'regiao_cap' ? 'Região ANP — CAP' : 'Região ANP — Emulsões'}

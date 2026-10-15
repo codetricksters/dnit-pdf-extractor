@@ -143,6 +143,11 @@ and add a manual one. Deleting is **logical** for an extracted record
 manual one; `excluir_itens(contrato_id, ids)` does the same for several records in
 one transaction, ignoring ids of another contract. `regiao_cap`/`regiao_emulsoes` pin an ANP region on the record
 (normalised against `cobertura()["regioes"]`; empty means follow the contract).
+Only the column of the code's product family is ever read (`_anotar_regioes`), so
+`incluir_item`/`atualizar_item` refuse a region for the **other** family
+(`_conferir_familia`) — it would show in the list with no effect on the
+calculation or the file. Clearing is always accepted, and a code without a
+product accepts both.
 `listar_itens` and `itens_para_export` ignore `excluido`.
 
 `aplicar_regiao(contrato_id, familia, mes_de, mes_ate, regiao, simular=False)` is

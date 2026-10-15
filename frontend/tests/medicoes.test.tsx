@@ -265,6 +265,23 @@ describe('Aba Medições', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  it('na edição, só oferece a região da família do produto do registro', async () => {
+    prepararEdicao([umItem(), umItem({ id: 2, codigo: '40210', produto_id: null, produto: null, familia: null })])
+    const { usuario } = renderApp('/contratos/1/medicoes')
+    const cap = (await screen.findByText('60112')).closest('tr')!
+    await usuario.click(within(cap).getByRole('button', { name: /Editar/ }))
+    let dialogo = screen.getByRole('dialog')
+    expect(within(dialogo).getByLabelText('Região ANP — CAP')).toBeInTheDocument()
+    expect(within(dialogo).queryByLabelText('Região ANP — Emulsões')).not.toBeInTheDocument()
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+
+    const semProduto = screen.getByText('40210').closest('tr')!
+    await usuario.click(within(semProduto).getByRole('button', { name: /Editar/ }))
+    dialogo = screen.getByRole('dialog')
+    expect(within(dialogo).getByLabelText('Região ANP — CAP')).toBeInTheDocument()
+    expect(within(dialogo).getByLabelText('Região ANP — Emulsões')).toBeInTheDocument()
+  })
+
   it('marca origem e região própria na lista', async () => {
     prepararEdicao([umItem({ origem: 'editado', regiao_cap: 'Sul' })])
     renderApp('/contratos/1/medicoes')

@@ -114,14 +114,14 @@ def test_editar_registro_do_pdf_marca_editado_e_fixa_regiao():
     [item] = medicoes_repo.listar_itens(contrato_id)
 
     assert medicoes_repo.atualizar_item(
-        contrato_id, item["id"], {"valor_pi": "5.00", "regiao_emulsoes": "nordeste"}
+        contrato_id, item["id"], {"valor_pi": "5.00", "regiao_cap": "nordeste"}
     )
     item = medicoes_repo.buscar_item(contrato_id, item["id"])
     assert item["origem"] == "editado" and item["valor_pi"] == Decimal("5.00")
-    assert item["regiao_emulsoes"] == "Nordeste"
+    assert item["regiao_cap"] == "Nordeste"
 
-    medicoes_repo.atualizar_item(contrato_id, item["id"], {"regiao_emulsoes": ""})
-    assert medicoes_repo.buscar_item(contrato_id, item["id"])["regiao_emulsoes"] is None
+    medicoes_repo.atualizar_item(contrato_id, item["id"], {"regiao_cap": ""})
+    assert medicoes_repo.buscar_item(contrato_id, item["id"])["regiao_cap"] is None
 
 
 def test_registro_do_pdf_nao_muda_codigo_nem_mes():
@@ -328,3 +328,21 @@ def test_sem_atualizar_o_reenvio_continua_preservando():
     medicoes_repo.gravar_itens(contrato_id, [_linha("60112", valor=99.0), _linha("60300", valor=98.0)],
                                limpar_regioes=True)
     assert _estado(contrato_id) == antes
+
+
+def test_regiao_da_outra_familia_e_recusada():
+    """A região de Emulsões num código de CAP não teria efeito no cálculo nem na
+    planilha, mas apareceria na lista como se valesse."""
+    contrato_id = _contrato_com_familias()
+    cap = next(i for i in medicoes_repo.listar_itens(contrato_id) if i["codigo"] == "60112")
+
+    with pytest.raises(MedicaoInvalida, match="regiao_emulsoes: o código 60112 é de CAP"):
+        medicoes_repo.atualizar_item(contrato_id, cap["id"], {"regiao_emulsoes": "Sul"})
+    with pytest.raises(MedicaoInvalida, match="regiao_cap: o código 60300 é de Emulsões"):
+        medicoes_repo.incluir_item(contrato_id, _novo(codigo="60300", regiao_cap="Sul"))
+    assert medicoes_repo.buscar_item(contrato_id, cap["id"])["regiao_emulsoes"] is None
+
+    # Limpar é sempre possível, e um código sem produto aceita as duas.
+    assert medicoes_repo.atualizar_item(contrato_id, cap["id"], {"regiao_emulsoes": ""})
+    sem_produto = next(i for i in medicoes_repo.listar_itens(contrato_id) if i["codigo"] == "40210")
+    assert medicoes_repo.atualizar_item(contrato_id, sem_produto["id"], {"regiao_emulsoes": "Sul"})
