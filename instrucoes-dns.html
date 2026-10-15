@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurar DNS - reequilibrio.local</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .banner {
+            background: #2196F3;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .banner h1 { margin: 0 0 10px 0; }
+        .banner p { margin: 0; opacity: 0.9; }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #2e7d32;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #2196F3;
+        }
+        .steps {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .steps ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .steps li {
+            margin: 8px 0;
+        }
+        code {
+            background: #263238;
+            color: #aed581;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .highlight {
+            background: #fff9c4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        #current-dns {
+            font-family: monospace;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="banner">
+        <h1>🌐 Configurar Acesso por Nome</h1>
+        <p>Configure seu computador para acessar <strong>http://reequilibrio.local</strong></p>
+    </div>
+
+    <div id="status-check">
+        <button onclick="testarDNS()">🔍 Testar Agora</button>
+        <div id="resultado"></div>
+    </div>
+
+    <div class="section">
+        <h2>📋 Como Funciona</h2>
+        <p>
+            Para que seu computador consiga acessar <code>http://reequilibrio.local</code>,
+            ele precisa saber que esse nome aponta para o IP <span class="highlight">192.168.10.20</span>.
+        </p>
+        <p>
+            <strong>Você precisa configurar seu computador (ou o roteador) para usar
+            <span class="highlight">192.168.10.20</span> como servidor DNS.</strong>
+        </p>
+    </div>
+
+    <div class="section">
+        <h2>⚙️ Opção A: Configurar no Roteador (Recomendado)</h2>
+        <p><strong>Vantagem:</strong> Afeta todos os dispositivos da rede automaticamente.</p>
+        <div class="steps">
+            <ol>
+                <li>Acesse o painel do roteador (geralmente <code>192.168.1.1</code> ou <code>192.168.0.1</code>)</li>
+                <li>Entre com usuário e senha do roteador</li>
+                <li>Procure por "DHCP", "DNS" ou "Configurações de Rede"</li>
+                <li>Configure o <strong>DNS Primário</strong> como: <span class="highlight">192.168.10.20</span></li>
+                <li>Salve as configurações</li>
+                <li>Reinicie o roteador</li>
+                <li>Reconecte seus dispositivos à rede Wi-Fi</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>💻 Opção B: Configurar em Cada Dispositivo</h2>
+
+        <h3>Windows</h3>
+        <div class="steps">
+            <ol>
+                <li>Painel de Controle → Rede e Internet → Central de Rede e Compartilhamento</li>
+                <li>Clique na sua conexão → Propriedades</li>
+                <li>Selecione "Protocolo TCP/IP Versão 4" → Propriedades</li>
+                <li>Marque "Usar os seguintes endereços de servidor DNS"</li>
+                <li>Servidor DNS preferencial: <code>192.168.10.20</code></li>
+                <li>Servidor DNS alternativo: <code>8.8.8.8</code></li>
+                <li>OK → OK</li>
+            </ol>
+        </div>
+
+        <h3>macOS</h3>
+        <div class="steps">
+            <ol>
+                <li>Preferências do Sistema → Rede</li>
+                <li>Selecione sua conexão (Wi-Fi ou Ethernet) → Avançado</li>
+                <li>Aba "DNS"</li>
+                <li>Clique no botão + embaixo da lista de servidores DNS</li>
+                <li>Digite: <code>192.168.10.20</code></li>
+                <li>Arraste esse servidor para o topo da lista</li>
+                <li>OK → Aplicar</li>
+            </ol>
+        </div>
+
+        <h3>Linux (Ubuntu/NetworkManager)</h3>
+        <div class="steps">
+            <ol>
+                <li>Configurações → Rede</li>
+                <li>Clique no ícone de engrenagem da sua conexão</li>
+                <li>Aba "IPv4"</li>
+                <li>Em "DNS", desative "Automático"</li>
+                <li>Digite: <code>192.168.10.20</code></li>
+                <li>Aplicar</li>
+            </ol>
+        </div>
+
+        <h3>iPhone/iPad</h3>
+        <div class="steps">
+            <ol>
+                <li>Ajustes → Wi-Fi</li>
+                <li>Toque no (i) ao lado da rede conectada</li>
+                <li>Configurar DNS → Manual</li>
+                <li>Remova os servidores existentes</li>
+                <li>Adicionar Servidor: <code>192.168.10.20</code></li>
+                <li>Salvar</li>
+            </ol>
+        </div>
+
+        <h3>Android</h3>
+        <div class="steps">
+            <ol>
+                <li>Configurações → Wi-Fi</li>
+                <li>Pressione e segure a rede conectada → Modificar rede</li>
+                <li>Opções avançadas → Configurações de IP → Estático</li>
+                <li>DNS 1: <code>192.168.10.20</code></li>
+                <li>DNS 2: <code>8.8.8.8</code></li>
+                <li>Salvar</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>✅ Depois da Configuração</h2>
+        <p>Clique no botão abaixo para testar se está funcionando:</p>
+        <button onclick="testarDNS()">🔍 Testar DNS</button>
+        <p>Se funcionar, acesse: <a href="http://reequilibrio.local/">http://reequilibrio.local/</a></p>
+    </div>
+
+    <script>
+        async function testarDNS() {
+            const resultado = document.getElementById('resultado');
+            resultado.innerHTML = '<div class="status">⏳ Testando...</div>';
+
+            try {
+                // Tentar acessar pelo nome
+                const response = await fetch('http://reequilibrio.local/openapi.json', {
+                    mode: 'no-cors',
+                    cache: 'no-cache'
+                });
+
+                resultado.innerHTML = `
+                    <div class="status success">
+                        ✅ Sucesso! Seu computador está configurado corretamente!<br>
+                        <a href="http://reequilibrio.local/" style="color: #2e7d32; text-decoration: underline;">
+                            Clique aqui para acessar: http://reequilibrio.local/
+                        </a>
+                    </div>
+                `;
+            } catch (e) {
+                resultado.innerHTML = `
+                    <div class="status error">
+                        ❌ Ainda não está funcionando<br><br>
+                        Seu computador ainda não está usando o DNS correto.<br>
+                        Siga as instruções acima para configurar o DNS como <strong>192.168.10.20</strong><br><br>
+                        Por enquanto, acesse pelo IP:
+                        <a href="http://192.168.10.20/" style="color: #c62828;">http://192.168.10.20/</a>
+                    </div>
+                `;
+            }
+        }
+
+        // Testar automaticamente ao carregar a página
+        window.onload = function() {
+            // Detectar se foi acessado por nome ou IP
+            if (window.location.hostname === 'reequilibrio.local' || window.location.hostname === 'reequilibrio') {
+                document.getElementById('resultado').innerHTML = `
+                    <div class="status success">
+                        ✅ Perfeito! Você está acessando pelo nome: <strong>${window.location.hostname}</strong><br>
+                        Nada mais a fazer, está tudo configurado!
+                    </div>
+                `;
+            } else {
+                document.getElementById('resultado').innerHTML = `
+                    <div class="status error">
+                        ℹ️ Você está acessando pelo IP: <strong>${window.location.hostname}</strong><br>
+                        Configure o DNS para poder usar o nome <strong>reequilibrio.local</strong>
+                    </div>
+                `;
+            }
+        };
+    </script>
+</body>
+</html>
