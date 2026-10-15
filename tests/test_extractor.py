@@ -320,3 +320,82 @@ def test_extract_header_standalone_function():
         header = extract_header(b"fakebytes", "medicao.pdf")
     assert header["Contrato"] == "06 00134/2022 - HWN ENGENHARIA LTDA"
     assert header["Número do Processo"] == "50606.000509/2021-44"
+
+
+# --- páginas com a grade interrompida (PDFs reais das primeiras medições) ---
+
+# Como o pdfplumber devolveu a 1ª medição do contrato 134/2022: as células são
+# retângulos soltos, sem grade única, então código+descrição, unidade e números
+# saem em tabelas separadas. O texto da página, porém, vem íntegro.
+FRAGMENTADA = [
+    [
+        ["Serviço", "Descrição", "Unidade", "Preço\nUnitário", "Quantidade\nAcumulada",
+         "Valor a PI\nAcumulado", "Valor a PI\nLíquido", "Fator", "Reajustamento\nLíquido",
+         "Ajuste Contratual\nLíquido", None],
+        ["1,0 - CONSERVAÇÃO DA FAIXA DE DOMÍNIO", None, None, None, None, None, None, None, None, None, None],
+        ["54988", "CONSERVAÇÃO DA FAIXA DE DOMÍNIO E LIMPEZA DE", None, None, None, None, None,
+         None, None, None, "0,00"],
+    ],
+    [["63.968,130", "0,600", "38.380,87", "38.380,87", "0,1202", "4.613,38"],
+     [None, None, "38.380,87", "38.380,87", None, None]],
+    [["8,0 - AQUISIÇÃO E TRANSPORTE DE MATERIAL BETUMINOSO", None, None],
+     ["29083", "AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C", "0,00"],
+     ["60112", "AQUISIÇÃO DE CAP 50/70", "0,00"]],
+    [["T"], ["T"]],
+    [["2.333,7400", "0,112", "261,37", "261,37", "0,5034", "131,57"],
+     ["3.289,5400", "2,583", "8.496,88", "8.496,88", "0,5731", "4.869,56"],
+     [None, None, "9.383,46", "9.383,46", None, None]],
+]
+
+TEXTO_FRAGMENTADO = (
+    HEADER_TEXT
+    + "Serviço Descrição Unidade Fator\n"
+    "1,0 - CONSERVAÇÃO DA FAIXA DE DOMÍNIO E LIMPEZA DE DISPOSITIVOS DE DRENAGEM E DE OAC\n"
+    "54988 CONSERVAÇÃO DA FAIXA DE DOMÍNIO E LIMPEZA DE MES 63.968,130 0,600 38.380,87 38.380,87 0,1202 4.613,38 0,00\n"
+    "SUBTOTAL 38.380,87 38.380,87 4.613,38 0,00\n"
+    "8,0 - AQUISIÇÃO E TRANSPORTE DE MATERIAL BETUMINOSO\n"
+    "29083 AQUISIÇÃO DE EMULSÃO ASFÁLTICA RR-1C T 2.333,7400 0,112 261,37 261,37 0,5034 131,57 0,00\n"
+    "60112 AQUISIÇÃO DE CAP 50/70 T 3.289,5400 2,583 8.496,88 8.496,88 0,5731 4.869,56 0,00\n"
+    "9999862 EST ISS REF AC 32/08-TCU-P R$ 0,0000 0,000 0,00 0,00 0,0000 0,00 -297,82\n"
+    "SOMA 115.509,62 115.509,62 23.919,95 -297,82\n"
+)
+
+
+def test_pagina_com_grade_interrompida_extrai_o_60112():
+    mock_pdf = make_pdfplumber_mock([FRAGMENTADA], page_text=TEXTO_FRAGMENTADO)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "01.pdf")
+
+    # Só itens de serviço: nenhuma coluna de números vira "registro".
+    assert [r["Serviço"] for r in result["rows"]] == ["54988", "29083", "60112", "9999862"]
+    cap = next(r for r in result["rows"] if r["Serviço"] == "60112")
+    assert cap["Descrição"] == "AQUISIÇÃO DE CAP 50/70"
+    assert cap["Unidade"] == "T"
+    assert cap["Preço Unitário"] == pytest.approx(3289.54)
+    assert cap["Quantidade Acumulada"] == pytest.approx(2.583)
+    assert cap["Valor a PI Acumulado"] == pytest.approx(8496.88)
+    assert cap["Valor a PI Líquido"] == pytest.approx(8496.88)
+    assert cap["Fator"] == pytest.approx(0.5731)
+    assert cap["Reajustamento Líquido"] == pytest.approx(4869.56)
+    assert cap["Ajuste Contratual Líquido"] == pytest.approx(0.0)
+    assert cap["Source_File"] == "01.pdf"
+    assert cap["Período Líquido"] == "01/02/2024 - 29/02/2024"
+
+
+def test_pagina_com_grade_interrompida_le_o_estorno_negativo():
+    mock_pdf = make_pdfplumber_mock([FRAGMENTADA], page_text=TEXTO_FRAGMENTADO)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "01.pdf")
+    estorno = next(r for r in result["rows"] if r["Serviço"] == "9999862")
+    assert estorno["Unidade"] == "R$"
+    assert estorno["Ajuste Contratual Líquido"] == pytest.approx(-297.82)
+
+
+def test_pagina_integra_continua_usando_as_tabelas():
+    """Com a grade íntegra o caminho das tabelas segue valendo: o texto da página
+    não substitui o que as tabelas já entregam (descrições em várias linhas, etc.)."""
+    texto = HEADER_TEXT + "56988 TEXTO DIFERENTE DA TABELA M2 1.234,56 100,00 123.456,00 100.000,00 1,0000 0,00 0,00\n"
+    mock_pdf = make_pdfplumber_mock([[SAMPLE_TABLE]], page_text=texto)
+    with patch("app.services.extractor.pdfplumber.open", return_value=mock_pdf):
+        result = extract_from_pdf(b"fakebytes", "integra.pdf")
+    assert [r["Descrição"] for r in result["rows"]] == ["Pavimentação asfáltica", "Terraplenagem geral"]

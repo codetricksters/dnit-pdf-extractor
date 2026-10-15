@@ -34,6 +34,30 @@ extracted table schema in `architecture.md`. Called once per uploaded file.
 | `_row_is_dangling` — all columns except `Descrição` are empty | Merge `Descrição` into previous record |
 | Otherwise | Save previous record, start new one |
 
+### Pages whose grid is broken
+
+Some PDFs (the first measurements of a contract, e.g. contrato 134/2022, MP 01–09)
+draw each cell as a loose rectangle, so there is no single grid and
+`extract_tables()` splits the columns into separate tables: code and description
+in one, the unit in another, the numbers in a third. Read as rows, the numbers
+become junk records and the code is lost (a 3-column table is dropped by the
+"≤ 3 columns" filter). No `extract_tables` setting fixes it — `snap`/`join`
+tolerances either leave the fragments or collapse everything — but the page's text
+lines are intact.
+
+`_records_from_text` therefore reads the item lines
+(`code description [Não] unit` + the seven numeric columns), and `_grid_is_broken`
+decides per page: if a record the tables produced is not a service item, or a code
+printed on the page is missing from the tables, the page's table records are
+discarded and its text records used. A page with an intact grid never takes this
+path, so descriptions that wrap onto several lines are still merged by the table
+path; on the fallback path a wrapped description keeps only its first line (the
+code, which everything hangs off, is unaffected).
+
+Validate against a real series by comparing the extracted totals with the
+`SOMA` line printed on each page (PI Líquido, Reajustamento, Ajuste): all 53
+PDFs of contrato 134/2022 reconcile.
+
 ### Header Normalisation
 
 `_normalize_header` normalises both sides to spaces before comparing (PDF labels use `\n` in multi-word column names like `"Código\nSICRO"`).

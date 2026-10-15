@@ -50,8 +50,60 @@ _NUMERO_PROCESSO_RE = re.compile(
     r"N[uú]mero\s+do\s+Processo:\s*([\d./\-]+)",
     re.IGNORECASE,
 )
+# One item line of the main table as pdfplumber's text extraction prints it:
+# "60112 AQUISIÇÃO DE CAP 50/70 T 3.289,5400 2,583 8.496,88 8.496,88 0,5731 4.869,56 0,00"
+# = code, description, [Código SICRO], unit and the seven numeric columns. The last
+# figure is sometimes cut by the PDF itself ("1.750.027,"), so decimals are optional.
+_NUM = r"-?\d[\d.]*,\d*"
+_ITEM_LINE_RE = re.compile(
+    rf"^(\d{{4,}})\s+(.+?)\s+(?:(N[ãa]o|Sim)\s+)?(\S+)\s+((?:{_NUM}\s+){{6}}{_NUM})$",
+    re.IGNORECASE,
+)
+_NUMERIC_COLUMNS_ORDER = [
+    "Preço Unitário",
+    "Quantidade Acumulada",
+    "Valor a PI Acumulado",
+    "Valor a PI Líquido",
+    "Fator",
+    "Reajustamento Líquido",
+    "Ajuste Contratual Líquido",
+]
 
 
+def _records_from_text(text: str) -> list[dict]:
+    """Item records read from the page's text lines, one per item line.
+
+    Some PDFs draw each cell as a loose rectangle, so there is no single grid and
+    ``extract_tables`` splits the columns into separate tables (code and
+    description in one, unit in another, the numbers in a third) while the text
+    stays intact. A description that wraps onto a second line is kept only up to
+    its first line here; the code — the key everything hangs off — is unaffected.
+    """
+    records = []
+    for line in text.split("\n"):
+        m = _ITEM_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        record: dict = {col: "" for col in EXPECTED_COLUMNS}
+        record["Serviço"] = m.group(1)
+        record["Descrição"] = m.group(2).strip()
+        record["Código SICRO"] = m.group(3) or ""
+        record["Unidade"] = m.group(4)
+        for col, value in zip(_NUMERIC_COLUMNS_ORDER, m.group(5).split()):
+            record[col] = value
+        records.append(record)
+    return records
+
+
+def _grid_is_broken(table_records: list[dict], text_records: list[dict]) -> bool:
+    """True when the tables of a page do not hold what its text lines show.
+
+    Either some "record" is not a service item (a column of numbers read as rows),
+    or a code printed on the page never made it into the tables.
+    """
+    if any(not _is_new_record(r.get("Serviço", "")) for r in table_records):
+        return True
+    return not {r["Serviço"] for r in text_records} <= {r["Serviço"] for r in table_records}
 
 
 def _is_indices_row(row: list) -> bool:
@@ -211,8 +263,10 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> dict:
             # None column right after "Preço Unitário"), so rows are mapped by the
             # header of their own page; the document's first header is the fallback.
             page_header: list | None = None
+            page_text = page.extract_text() or ""
+            antes = len(records)
+            antes_corrente = dict(current_record) if current_record is not None else None
             if not _header_done:
-                page_text = page.extract_text() or ""
                 if not contrato:
                     m = _CONTRATO_RE.search(page_text)
                     if m:
@@ -287,6 +341,17 @@ def extract_from_pdf(file_bytes: bytes, source_name: str) -> dict:
                         if current_record is not None:
                             records.append(current_record)
                         current_record = row_dict
+
+            text_records = _records_from_text(page_text)
+            desta_pagina = records[antes:] + ([current_record] if current_record is not None else [])
+            if text_records and _grid_is_broken(desta_pagina, text_records):
+                # Discard what the tables produced for this page and read its lines.
+                del records[antes:]
+                current_record = antes_corrente
+                if current_record is not None:
+                    records.append(current_record)
+                records.extend(text_records[:-1])
+                current_record = text_records[-1]
 
     if current_record is not None:
         records.append(current_record)
