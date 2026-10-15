@@ -21,13 +21,19 @@ tem()  { command -v "$1" >/dev/null 2>&1; }
 
 NOME="reequilibrio"
 PORTA_APP=8000
-IP=$(ip -4 addr show | grep 'inet ' | grep -v 127.0.0.1 | head -1 | awk '{print $2}' | cut -d/ -f1)
 
-[ -n "$IP" ] || fail "Não consegui detectar o IP da rede local"
+# Interface e IP vêm da rota padrão: é por ela que a rede local alcança este
+# servidor. Pegar "o primeiro endereço" acertaria só quando nenhuma bridge do
+# Docker (docker0, br-...) viesse antes da interface física.
+IFACE=$(ip -4 route show default | awk '{for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit }}')
+[ -n "$IFACE" ] || fail "Não encontrei a interface da rota padrão (sem rede configurada?)"
+IP=$(ip -4 -o addr show dev "$IFACE" scope global | awk '{print $4}' | cut -d/ -f1 | head -1)
+
+[ -n "$IP" ] || fail "Não consegui detectar o IP da interface $IFACE"
 
 log "Configurando acesso em rede local:"
 log "  Nome: ${NOME}.local e ${NOME}"
-log "  IP: ${IP}"
+log "  IP: ${IP} (interface ${IFACE})"
 log "  Aplicação na porta ${PORTA_APP}"
 
 # 1. nginx como proxy reverso --------------------------------------------------
@@ -101,7 +107,7 @@ address=/${NOME}.local/${IP}
 address=/${NOME}/${IP}
 
 # Escutar apenas na interface de rede local
-interface=eth0
+interface=${IFACE}
 bind-interfaces
 
 # Encaminhar outras consultas DNS para servidores públicos
@@ -134,6 +140,12 @@ sudo systemctl enable --now dnsmasq >/dev/null
 sudo systemctl restart dnsmasq
 
 log "dnsmasq configurado como servidor DNS local"
+
+# dig é usado na verificação abaixo; o dnsmasq não o traz.
+if ! tem dig; then
+    log "Instalando dig (bind9-dnsutils)..."
+    sudo apt-get install -y bind9-dnsutils || sudo apt-get install -y dnsutils
+fi
 
 # 3. Firewall (ufw) -------------------------------------------------------------
 
