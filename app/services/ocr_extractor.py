@@ -1,4 +1,5 @@
 import io
+import logging
 import re
 import shutil
 
@@ -21,6 +22,8 @@ _PERIODO_LIQUIDO_OCR_RE = re.compile(
     r"Per[ií]odo\s+L[ií]quido[:\s]*(\d{2}[/lI|]\d{2}[/lI|]\d{4})\s*[-–—]?\s*(\d{2}[/lI|]\d{2}[/lI|]\d{4})",
     re.IGNORECASE,
 )
+
+logger = logging.getLogger(__name__)
 
 _SERVICE_CODE_RE = re.compile(r"^\d{4,}")
 
@@ -57,7 +60,9 @@ def _ocr_image_tesseract(pil_image: Image.Image) -> list[tuple]:
     """Run Tesseract and return results in EasyOCR-compatible format."""
     import pytesseract
 
-    config = r"--oem 3 --psm 3 -l por+eng"
+    # psm 4 (one column of variable-size text) keeps one-letter cells such as the
+    # unit "T", which psm 3 drops; rows are rebuilt from the coordinates anyway.
+    config = r"--oem 3 --psm 4 -l por+eng"
     data = pytesseract.image_to_data(
         pil_image.convert("L"),  # grayscale
         config=config,
@@ -132,8 +137,36 @@ def _ocr_image(pil_image: Image.Image) -> list[tuple]:
     )
 
 
+_OSD_MIN_CONFIDENCE = 2.0
+
+
+def _orientation_from_osd(pil_image: Image.Image) -> int | None:
+    """Rotation to apply (PIL's counter-clockwise degrees) according to Tesseract's
+    orientation detection, or None when it is unavailable or not confident."""
+    if not _tesseract_available():
+        return None
+    import pytesseract
+
+    try:
+        # OSD does not need the full 300 dpi render.
+        reduzida = pil_image.convert("L")
+        reduzida.thumbnail((1800, 1800))
+        osd = pytesseract.image_to_osd(reduzida, output_type=pytesseract.Output.DICT)
+    except Exception:
+        return None
+    if float(osd.get("orientation_conf", 0)) < _OSD_MIN_CONFIDENCE:
+        return None
+    # "rotate" is the clockwise angle that makes the text upright.
+    return -int(osd.get("rotate", 0)) % 360 or 0
+
+
 def _detect_orientation(pil_image: Image.Image) -> int:
-    """Detect if the page needs rotation. Returns the rotation angle (0 or -90)."""
+    """Detect if the page needs rotation. Returns the angle to pass to PIL's
+    ``rotate`` (0, 90, 180 or 270; the heuristic fallback only finds 0 or -90)."""
+    osd = _orientation_from_osd(pil_image)
+    if osd is not None:
+        return osd
+
     results = _ocr_image(pil_image)
 
     if not results:
@@ -307,14 +340,21 @@ def _assign_to_columns(row_items: list[dict], col_boundaries: list[float]) -> li
     return cells
 
 
+# Whole-word patterns: "conser" must not match the "CONSERVAÇÃO ROTINEIRA" item.
+_INDICES_PATTERNS = [
+    re.compile(r"\b" + kw + r"\b", re.IGNORECASE) for kw in _INDICES_KEYWORDS
+]
+
+
 def _is_indices_row(row: list[dict]) -> bool:
-    row_text = " ".join(it["text"] for it in row).lower()
-    return any(kw in row_text for kw in _INDICES_KEYWORDS)
+    row_text = " ".join(it["text"] for it in row)
+    return any(pat.search(row_text) for pat in _INDICES_PATTERNS)
 
 
 _PAGE_NOISE_KEYWORDS = (
     "solicitado por", "período líquido", "período acumulado",
     "resumo da", "medição", "versão dos serviços",
+    "superintendência", "data base:", "periodo liquido", "número do processo",
 )
 
 
@@ -347,22 +387,45 @@ def _is_new_record(service_val: str) -> bool:
 
 
 def _is_continuation_row(row: list[dict], cells: list[str]) -> bool:
-    """A continuation row has only text in the Descrição area (column 1).
+    """A continuation row only has text in the Descrição column.
 
-    Detected when: few items (1-3), no service code, and all items fall
-    within the Descrição column's X-range.
+    The wrapped line of a description can have any number of words, so the test
+    is on the columns, not on how many items the row has.
     """
-    if len(row) > 3:
+    if len(cells) < 2 or cells[0].strip() or not cells[1].strip():
         return False
-    service_val = cells[0].strip() if cells else ""
-    if service_val and _SERVICE_CODE_RE.match(service_val):
-        return False
-    non_empty = [c for c in cells if c.strip()]
-    if len(non_empty) > 2:
-        return False
-    if cells[0].strip():
-        return False
-    return bool(cells[1].strip()) if len(cells) > 1 else False
+    return not any(c.strip() for c in cells[2:])
+
+
+_SOMAS = ("Valor a PI Acumulado", "Valor a PI Líquido", "Reajustamento Líquido")
+
+
+def _conferir_subtotais(records: list[dict], source_name: str) -> list[str]:
+    """Sections whose SUBTOTAL line differs from the sum of the items read.
+
+    OCR can swallow a figure (e.g. two equal values read as one), which no rule
+    can rebuild; the SUBTOTAL printed on the page is what exposes it. Returns the
+    codes of each divergent section and logs a warning for it.
+    """
+    divergentes: list[str] = []
+    codigos: list[str] = []
+    somas = dict.fromkeys(_SOMAS, 0.0)
+    for r in records:
+        servico = r["Serviço"].strip()
+        if _SERVICE_CODE_RE.match(servico):
+            codigos.append(servico)
+            for col in _SOMAS:
+                somas[col] += r.get(col) or 0.0
+        elif servico.upper().startswith("SUBTOTAL"):
+            if any(abs(somas[c] - (r.get(c) or 0.0)) > 0.05 for c in _SOMAS):
+                divergentes.append(", ".join(codigos))
+                logger.warning(
+                    "'%s' (OCR): o SUBTOTAL não fecha com os itens lidos (%s); "
+                    "confira esses códigos.", source_name, ", ".join(codigos),
+                )
+            codigos = []
+            somas = dict.fromkeys(_SOMAS, 0.0)
+    return divergentes
 
 
 def _extract_pages_via_disk(pdf, source_name: str, job_id: str) -> list[list[dict]]:
@@ -561,4 +624,5 @@ def extract_from_pdf_ocr(
         row["Source_File"] = source_name
         convert_numeric_columns(row)
 
+    _conferir_subtotais(records, source_name)
     return records
