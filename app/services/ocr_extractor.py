@@ -7,7 +7,13 @@ import pdfplumber
 from .exceptions import ExtractionError
 from PIL import Image
 
-from .extractor import EXPECTED_COLUMNS, _PERIODO_LIQUIDO_RE
+from .extractor import (
+    EXPECTED_COLUMNS,
+    _CONTRATO_RE,
+    _DATA_BASE_RE,
+    _NUMERO_PROCESSO_RE,
+    _PERIODO_LIQUIDO_RE,
+)
 from .number_parser import convert_numeric_columns
 
 # More tolerant regex for OCR text: colon is optional, "/" can be misread, dash between dates optional
@@ -395,8 +401,36 @@ def _extract_pages_via_disk(pdf, source_name: str, job_id: str) -> list[list[dic
     return all_page_rows
 
 
-def extract_from_pdf_ocr(file_bytes: bytes, source_name: str, *, job_id: str | None = None) -> list[dict]:
+def _header_from_ocr(all_page_rows: list[list[dict]]) -> dict:
+    """Contrato, Data Base and Número do Processo read from the OCR'd lines.
+
+    A scanned PDF has no text layer, so ``extractor.extract_header`` finds nothing
+    in it; without the contract number the items cannot be stored at all.
+    """
+    text = "\n".join(" ".join(it["text"] for it in row) for row in all_page_rows)
+    header: dict = {}
+    for chave, padrao in (
+        ("Contrato", _CONTRATO_RE),
+        ("Data Base", _DATA_BASE_RE),
+        ("Número do Processo", _NUMERO_PROCESSO_RE),
+    ):
+        m = padrao.search(text)
+        if m:
+            header[chave] = m.group(1).strip()
+    return header
+
+
+def extract_from_pdf_ocr(
+    file_bytes: bytes,
+    source_name: str,
+    *,
+    job_id: str | None = None,
+    header_out: dict | None = None,
+) -> list[dict]:
     """Extract tabular data from an image-based PDF using OCR.
+
+    When ``header_out`` is given, the contract header read from the OCR text is
+    written into it.
 
     When job_id is provided, pages are split to disk and processed one at a
     time to avoid holding all page images in memory simultaneously.
@@ -461,6 +495,9 @@ def extract_from_pdf_ocr(file_bytes: bytes, source_name: str, *, job_id: str | N
             d1 = re.sub(r"[lI|]", "/", m.group(1))
             d2 = re.sub(r"[lI|]", "/", m.group(2))
             periodo_liquido = f"{d1} - {d2}"
+
+    if header_out is not None:
+        header_out.update(_header_from_ocr(all_page_rows))
 
     header_result = _find_header_row(all_page_rows)
     if header_result is None:

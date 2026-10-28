@@ -6,6 +6,9 @@ from app.services.exceptions import ExtractionError
 
 from app.services.extractor import (
     EXPECTED_COLUMNS,
+    _DATA_BASE_RE,
+    _NUMERO_PROCESSO_RE,
+    _PERIODO_LIQUIDO_RE,
     _clean_cell,
     _is_header_row,
     _is_indices_row,
@@ -121,6 +124,24 @@ def test_normalize_header_maps_known_columns():
     assert result[0] == "Serviço"
     assert result[1] == "Descrição"
     assert result[2] == "Código SICRO"
+
+
+def test_normalize_header_tolerates_labels_without_spaces():
+    # PDFs of contrato 632/2024 (5ª and 7ª MP) lose the spaces of the text layer
+    raw = ["Serviço", "Descrição", "Código\nSICRO", "ValoraPI\nAcumulado",
+           "ValoraPI\nLíquido", "AjusteContratual\nLíquido"]
+    assert _normalize_header(raw) == [
+        "Serviço", "Descrição", "Código SICRO", "Valor a PI Acumulado",
+        "Valor a PI Líquido", "Ajuste Contratual Líquido",
+    ]
+
+
+def test_header_regexes_tolerate_text_without_spaces():
+    texto = ("DataBase: 01/10/2023 NúmerodoProcesso: 50618.000129/2024-13\n"
+             "PeríodoLíquido: 01/02/2025-28/02/2025")
+    assert _DATA_BASE_RE.search(texto).group(1) == "01/10/2023"
+    assert _NUMERO_PROCESSO_RE.search(texto).group(1) == "50618.000129/2024-13"
+    assert _PERIODO_LIQUIDO_RE.search(texto).groups() == ("01/02/2025", "28/02/2025")
 
 
 def test_normalize_header_passes_unknown_through():

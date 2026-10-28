@@ -61,7 +61,14 @@ def process_text_pdf(file_bytes: bytes, filename: str, job_id: str) -> tuple[str
 def process_ocr_pdf(file_bytes: bytes, filename: str, job_id: str) -> tuple[str, str | None]:
     try:
         header = extract_header(file_bytes, filename)
-        rows = extract_from_pdf_ocr(file_bytes, filename, job_id=job_id)
+        lido_do_ocr: dict = {}
+        rows = extract_from_pdf_ocr(
+            file_bytes, filename, job_id=job_id, header_out=lido_do_ocr
+        )
+        # A scan has no text layer: fill what extract_header could not find.
+        for chave, valor in lido_do_ocr.items():
+            if not header.get(chave):
+                header[chave] = valor
     except ExtractionError as e:
         return ("", str(e))
     except Exception as e:

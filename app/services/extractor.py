@@ -31,7 +31,7 @@ EXPECTED_COLUMNS = [
 
 _SERVICE_CODE_RE = re.compile(r"^\d{4,}")
 _PERIODO_LIQUIDO_RE = re.compile(
-    r"Per[ií]odo\s+L[ií]quido:\s*(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})",
+    r"Per[ií]odo\s*L[ií]quido:\s*(\d{2}/\d{2}/\d{4})\s*-\s*(\d{2}/\d{2}/\d{4})",
     re.IGNORECASE,
 )
 
@@ -43,11 +43,11 @@ _CONTRATO_RE = re.compile(
     re.IGNORECASE,
 )
 _DATA_BASE_RE = re.compile(
-    r"Data\s+Base:\s*(\d{2}/\d{2}/\d{4})",
+    r"Data\s*Base:\s*(\d{2}/\d{2}/\d{4})",
     re.IGNORECASE,
 )
 _NUMERO_PROCESSO_RE = re.compile(
-    r"N[uú]mero\s+do\s+Processo:\s*([\d./\-]+)",
+    r"N[uú]mero\s*do\s*Processo:\s*([\d./\-]+)",
     re.IGNORECASE,
 )
 # One item line of the main table as pdfplumber's text extraction prints it:
@@ -189,19 +189,24 @@ def _map_row(raw_row: list, header: list) -> dict:
     return record
 
 
+def _sem_espacos(texto) -> str:
+    return re.sub(r"\s+", "", str(texto).lower())
+
+
 def _normalize_header(raw_header: list) -> list:
     """Map raw PDF header cells to canonical column names.
 
-    PDF cells often use newlines inside multi-word labels (e.g. 'Código\\nSICRO');
-    normalise both sides to spaces before comparing.
+    PDF cells often use newlines inside multi-word labels (e.g. 'Código\\nSICRO'),
+    and some PDFs lose the spaces altogether ('ValoraPI\\nAcumulado'); whitespace
+    is dropped on both sides before comparing.
     """
     mapping: dict[str, str] = {}
     for expected in EXPECTED_COLUMNS:
-        expected_norm = expected.lower().replace("\n", " ")
+        expected_norm = _sem_espacos(expected)
         for cell in raw_header:
             if not cell:
                 continue
-            cell_norm = str(cell).lower().replace("\n", " ")
+            cell_norm = _sem_espacos(cell)
             if expected_norm in cell_norm:
                 mapping[str(cell)] = expected
                 break
